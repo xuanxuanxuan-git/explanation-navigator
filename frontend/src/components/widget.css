@@ -1,0 +1,48 @@
+.chat-fab {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    border: none;
+    background: #111827;
+    color: white;
+    cursor: pointer;
+  }
+  
+  .chat-panel {
+    position: fixed;
+    right: 18px;
+    bottom: 86px;
+    width: 360px;
+    height: 520px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .chat-panel-header {
+    padding: 10px 12px;
+    background: #111827;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .chat-panel-body {
+    padding: 12px;
+    flex: 1;
+    overflow: auto;
+  }
+  
+  .chat-panel-footer {
+    padding: 10px 12px;
+    border-top: 1px solid #e5e7eb;
+  }
+  
