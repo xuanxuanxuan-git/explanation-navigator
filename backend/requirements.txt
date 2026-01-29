@@ -1,0 +1,6 @@
+Flask
+requests
+python==3.10
+python-dotenv
+flask-cors
+plotly
