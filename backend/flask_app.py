@@ -17,7 +17,7 @@ FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-TOOL_CALLING_MODEL = os.getenv("TOOL_CALLING_MODEL", "functiongemma:270m")
+TOOL_CALLING_MODEL = os.getenv("TOOL_CALLING_MODEL", "llama3.2:3b")
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
 
 azure_openai_api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -95,6 +95,8 @@ def _normalize_messages(messages):
 
 
 def get_tool_schemas():
+    # TODO: adjust the schema format according to the LLM called.
+    # For ollama, it is the old schema style.
     return explainer_tools
 
 def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
@@ -110,11 +112,11 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
             break
     
     if not tool_schema:
-        return False, ["Unknown tool"]
-    
-    required_fields = tool_schema.get("function", {}).get("parameters", {}).get("required", [])
-    properties = tool_schema.get("function", {}).get("parameters", {}).get("properties", {})
-    app.logger.info(properties)
+        return False, [{"name": "tool_name", "description": f"Unknown tool: {tool_name}"}]
+
+    params = tool_schema.get("parameters") or {}
+    required_fields = params.get("required") or []
+    properties = params.get("properties") or {}
 
     missing_fields = []
     for field in required_fields:
@@ -191,7 +193,7 @@ def chat_non_stream():
 
     # Set a system message here (or pass from frontend).
     system = (data.get("system") or "Answer questions succinctly.").strip()
-    app.logger.info("pass here")
+    
     try:
         messages = []
         if system and not render_tools:
@@ -222,7 +224,7 @@ def chat_non_stream():
         return jsonify({"error": str(e)}), 502
 
 
-def _chat_with_tools(messages: str, model: str = None, #history: ,
+def _chat_with_tools(messages: list, model: str = None, #history: ,
                     options: dict = None, max_iterations: int = 1):
     """
     Chat with tool calling support. Handles tool calls iteratively.
@@ -256,7 +258,7 @@ def _chat_with_tools(messages: str, model: str = None, #history: ,
         
         # Check for tool calls
         tool_calls = assistant_msg.get("tool_calls") or []
-        
+        app.logger.info(f"tool call result is: {tool_calls}")
         if not tool_calls:
             # Add assistant response to tool_reply, and return
             tool_reply.append({"role": "assistant", "content": []})
@@ -283,11 +285,11 @@ def _chat_with_tools(messages: str, model: str = None, #history: ,
                 
             else:
                 # Add tool result to messages
+                args_part = f" with arguments {tool_args}" if tool_args else ""
                 tool_reply.append({
                     "role": "tool",
                     "tool_name": tool_name,
-                    # TODO: fix the following line so that when functions have no arguments, the content is adjusted.
-                    "content": f"Tool {tool_name} called with arguments {tool_args}. Result: {tool_result}"
+                    "content": f"Tool {tool_name} called{args_part}. Result: {tool_result}"
                 })
                 
                 if visualisation:  # if there is visualisation result
