@@ -6,23 +6,38 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import requests
+from typing import Dict, List, Tuple, Optional
+
 from openai import OpenAI, AzureOpenAI
 from chatbot.explainers.tool_schemas import explainer_tools
 from chatbot.explainers.tool_functions import available_tools_mapping
 
 load_dotenv()
 
+
+# =============================================================================
+# CONFIG
+# =============================================================================
+
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
 FLASK_PORT = int(os.getenv("FLASK_PORT", "5001"))
 
+# ---- Provider selection ----
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()  # ollama | azure_openai | gemini
+
+# ---- Ollama ----
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-TOOL_CALLING_MODEL = os.getenv("TOOL_CALLING_MODEL", "llama3.2:3b")
+TOOL_CALLING_MODEL = os.getenv("TOOL_CALLING_MODEL", "functiongemma:270m")
+
+# ---- Azure OpenAI ----
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")
+AZURE_OPENAI_CHAT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT")        # model to use for chat
+AZURE_OPENAI_TOOL_DEPLOYMENT = os.getenv("AZURE_OPENAI_TOOL_DEPLOYMENT", AZURE_OPENAI_CHAT_DEPLOYMENT)
+
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
-
-azure_openai_api_key = os.getenv("AZURE_OPENAI_API_KEY")
-azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
 
 app = Flask(__name__)
 CORS(app, origins=ALLOWED_ORIGINS)
@@ -79,25 +94,82 @@ app.logger.addHandler(file_handler)
 # ============================================================================
 
 
-def _normalize_messages(messages):
+def _normalise_messages(messages):
     """
-    Expect: [{ role: 'user'|'assistant'|'system'|'tool', content: '...' }, ...]
+    Expect:
+      system/user/assistant: {role, content}
+      assistant tool-call:  {role, content, tool_calls}
+      tool:                {role, tool_name, content}
     """
     if not isinstance(messages, list):
         return []
+
     out = []
     for m in messages:
         role = (m.get("role") or "").strip()
-        content = (m.get("content") or "").strip()
-        if role in ("system", "user", "assistant", "tool") and content:
-            out.append({"role": role, "content": content})
+        if role not in ("system", "user", "assistant", "tool"):
+            continue
+
+        msg = {"role": role}
+
+        # assistant content (optional when tool_calls exist)
+        if "content" in m and m["content"] is not None:
+            msg["content"] = str(m["content"])
+
+        # preserve tool_calls
+        if role == "assistant" and "tool_calls" in m:
+            msg["tool_calls"] = m["tool_calls"]
+
+        # preserve tool_name for tool messages
+        if role == "tool":
+            # msg["tool_name"] = m.get("tool_name")
+            msg["tool_call_id"] = m.get("tool_call_id")
+
+        # OpenAI requires either content or tool_calls
+        if role == "assistant" and not msg.get("content") and not msg.get("tool_calls"):
+            continue
+        if role == "tool" and not msg.get("content"):
+            continue
+
+        out.append(msg)
+
     return out
 
+def get_tool_schemas(provider: Optional[str] = None):
+    """
+    Return tool schemas normalised for the target provider.
 
-def get_tool_schemas():
-    # TODO: adjust the schema format according to the LLM called.
-    # For ollama, it is the old schema style.
+    Native schemas are OpenAI/Gemini-style:
+      { "type": "function", "name": ..., "description": ..., "parameters": ... }
+
+    Ollama expects:
+      { "type": "function", "function": { "name": ..., "description": ..., "parameters": ... } }
+    """
+    provider = (provider or LLM_PROVIDER).lower()
+    needs_wrapped = provider == "ollama" or AZURE_OPENAI_CHAT_DEPLOYMENT == "o3"
+    
+    # If the provider is Ollama/o3 but the schema is flat schema,
+    # reformat the schema to into Ollama version.
+    if needs_wrapped:
+        normalised = []
+        for t in explainer_tools:
+            # Accept both already-wrapped and flat schemas
+            if "function" in t:
+                normalised.append(t)
+            else:
+                normalised.append({
+                    "type": "function",
+                    "function": {
+                        "name": t.get("name"),
+                        "description": t.get("description"),
+                        "parameters": t.get("parameters"),
+                    },
+                })
+        return normalised
+
+    # OpenAI / Azure / Gemini accept the flat schema
     return explainer_tools
+
 
 def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
     """
@@ -106,17 +178,18 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
     """
 
     tool_schema = None
-    for schema in get_tool_schemas():
-        if schema.get("function", {}).get("name") == tool_name:
+    for schema in explainer_tools:
+        name = schema.get("name") or schema.get("function", {}).get("name")
+        if name == tool_name:
             tool_schema = schema
             break
     
     if not tool_schema:
         return False, [{"name": "tool_name", "description": f"Unknown tool: {tool_name}"}]
 
-    params = tool_schema.get("parameters") or {}
-    required_fields = params.get("required") or []
-    properties = params.get("properties") or {}
+    parameters = tool_schema.get("parameters") or tool_schema.get("function", {}).get("parameters", {})
+    required_fields = parameters.get("required", [])
+    properties = parameters.get("properties", {})
 
     missing_fields = []
     for field in required_fields:
@@ -129,8 +202,9 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
 
     return is_valid, missing_fields
 
-def _execute_tool_call(tool_name: str, arguments: dict) -> str:
-    """Execute a tool call and return the result"""
+
+def _execute_tool_call(tool_name: str, arguments: dict) -> Tuple[bool, str, Optional[dict]]:
+    """Execute a tool call and return (success, text, visualisation)"""
 
     is_valid, missing_fields = _validate_tool_arguments(tool_name, arguments)
     if not is_valid:
@@ -167,6 +241,262 @@ def _execute_tool_call(tool_name: str, arguments: dict) -> str:
         error_msg = f"Error executing {tool_name}: {str(e)}"
         return False, error_msg, None
 
+# =============================================================================
+# LLM CLIENT ABSTRACTION
+# =============================================================================
+
+class BaseLLMClient:
+    """Unified interface for chat + streaming + tool calling."""
+
+    def chat(self, messages: List[dict], model: Optional[str] = None,
+             options: Optional[dict] = None,
+             tools: Optional[list] = None) -> dict:
+        """Return a single assistant message in OpenAI-style format."""
+        raise NotImplementedError
+
+    def stream(self, messages: List[dict], model: Optional[str] = None,
+               options: Optional[dict] = None,
+               tools: Optional[list] = None):
+        """Yield incremental assistant tokens (strings)."""
+        raise NotImplementedError
+
+# -----------------------------------------------------------------------------
+# OLLAMA CLIENT
+# -----------------------------------------------------------------------------
+
+class OllamaClient(BaseLLMClient):
+    def __init__(self, base_url: str):
+        self.base_url = base_url.rstrip("/")
+
+    def chat(self, messages, model=None, options=None, tools=None):
+        payload = {
+            "model": model or OLLAMA_MODEL,
+            "messages": messages,
+            "stream": False,
+            "options": options or {},
+        }
+        if tools:
+            payload["tools"] = tools
+
+        r = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=300)
+        r.raise_for_status()
+        return r.json().get("message") or {}
+
+    def stream(self, messages, model=None, options=None, tools=None):
+        payload = {
+            "model": model or OLLAMA_MODEL,
+            "messages": messages,
+            "stream": True,
+            "options": options or {},
+        }
+        if tools:
+            payload["tools"] = tools
+
+        with requests.post(f"{self.base_url}/api/chat", json=payload, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            for line in r.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                chunk = ((obj.get("message") or {}).get("content")) or ""
+                done = bool(obj.get("done"))
+                yield chunk, done
+
+
+# -----------------------------------------------------------------------------
+# AZURE OPENAI CLIENT
+# -----------------------------------------------------------------------------
+
+class AzureOpenAIClient(BaseLLMClient):
+    def __init__(self, api_key, endpoint, api_version):
+        self.client = AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=endpoint,
+            api_version=api_version,
+        )
+
+    def _to_openai_messages(self, messages: List[dict]) -> List[dict]:
+        """
+        Convert internal messages to OpenAI-compatible messages,
+        preserving tool_calls and tool_name when present.
+        """
+        out = []
+        for m in messages:
+            role = m.get("role")
+            msg = {"role": role}
+
+            # content (optional for assistant when tool_calls exist)
+            if "content" in m and m["content"] is not None:
+                msg["content"] = m["content"]
+
+            # preserve tool_calls
+            if role == "assistant" and "tool_calls" in m:
+                msg["tool_calls"] = m["tool_calls"]
+
+            # preserve tool_name for tool role
+            if role == "tool":
+                msg["tool_name"] = m.get("tool_name")
+
+            # OpenAI validation rules
+            if role == "assistant" and not msg.get("content") and not msg.get("tool_calls"):
+                continue
+            if role == "tool" and not msg.get("content"):
+                continue
+
+            out.append(msg)
+
+        return out
+    
+    def chat(self, messages, model=None, options=None, tools=None):
+        response = self.client.chat.completions.create(
+            model=model or AZURE_OPENAI_CHAT_DEPLOYMENT,
+            messages= messages, #self._to_openai_messages(messages),
+            tools=tools,
+            temperature=(options or {}).get("temperature", 1),
+        )
+
+        msg = response.choices[0].message
+        return msg.model_dump()
+
+    def stream(self, messages, model=None, options=None, tools=None):
+
+        stream = self.client.chat.completions.create(
+            model=model or AZURE_OPENAI_CHAT_DEPLOYMENT,
+            messages= messages, #self._to_openai_messages(messages),
+            tools=tools,
+            temperature=(options or {}).get("temperature", 1),
+            stream=True,
+        )
+
+        for event in stream:
+            if event.choices and event.choices[0].delta:
+                delta = event.choices[0].delta
+                token = delta.content or ""
+                yield token, False
+        yield "", True
+
+
+# =============================================================================
+# CLIENT FACTORY
+# =============================================================================
+
+def get_llm_client(provider: str) -> BaseLLMClient:
+    provider = provider.lower()
+    if provider == "ollama":
+        return OllamaClient(OLLAMA_BASE_URL)
+    elif provider in ("azure_openai", "openai", "azure"):
+        return AzureOpenAIClient(
+            api_key=AZURE_OPENAI_API_KEY,
+            endpoint=AZURE_OPENAI_ENDPOINT,
+            api_version=AZURE_OPENAI_API_VERSION,
+        )
+    elif provider == "gemini":
+        return GeminiClient(GEMINI_API_KEY)
+    else:
+        raise ValueError(f"Unknown LLM provider: {provider}")
+
+
+llm_client = get_llm_client(LLM_PROVIDER)
+
+
+# =============================================================================
+# TOOL-CALLING LOOP (LLM-AGNOSTIC)
+# =============================================================================
+
+def _chat_with_tools(messages: list, model: str = None, #history: ,
+                    options: dict = None, max_iterations: int = 1):
+    """
+    Chat with tool calling support. Handles tool calls iteratively.
+    Returns: (tool_reply_messages, visualisations)
+    """
+    tool_reply = []
+
+    iteration = 0
+    visualisations = []
+    
+    # TODO: why do we need multiple iterations?
+    while iteration < max_iterations:
+        iteration += 1
+        
+        assistant_msg = llm_client.chat(
+            messages=messages,
+            model=model,
+            options=options,
+            tools=get_tool_schemas(LLM_PROVIDER),
+        )
+        # structure of the assistant_msg: {"role": ..., "content": ..., "tool_calls": ...}
+        
+        # Check for tool calls
+        tool_calls = assistant_msg.get("tool_calls") or []
+        app.logger.info(f"Tool call result is: {tool_calls}")
+        if not tool_calls:
+            # Add assistant response to tool_reply, and return
+            tool_reply.append({
+                "role": "assistant",
+                "content": assistant_msg.get("content", ""), #[]
+            })
+            break
+        
+        # Append assistant tool-call message (CRITICAL for OpenAI/Gemini)
+        tool_reply.append({
+            "role": "assistant",
+            "content": assistant_msg.get("content", ""),
+            "tool_calls": tool_calls,
+        })
+
+        # Execute each tool call
+        # TODO: test that when multiple tool calls are detected, whether the reply is correctly formatted.
+        for tool_call in tool_calls:
+            func_info = tool_call.get("function") or {}
+            tool_name = func_info.get("name")
+            raw_args = func_info.get("arguments") or {}
+
+            # some LLM returns arguments as a string, not a dict
+            if isinstance(raw_args, str):
+                try:
+                    tool_args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    tool_args = {}
+            else:
+                tool_args = raw_args
+
+            # Execute the tool
+            success, tool_result, visualisation = _execute_tool_call(tool_name, tool_args)
+            
+            if not success:
+                # Arguments are incomplete
+                app.logger.warning(f"Tool call validation failed: {tool_result}")
+                
+                # Add a message asking user for input
+                tool_reply.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id"),  #"tool_name": tool_name,
+                    "content": f"ERROR: {tool_result}"})
+
+            else:
+                # Add tool result to messages
+                # args_part = f" with arguments {tool_args}" if tool_args else ""
+                tool_reply.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id"),  #"tool_name": tool_name,
+                    "content": f"{tool_result}" #Tool {tool_name} called{args_part}. Result: 
+                })
+                
+                if visualisation:  # if there is visualisation result
+                    visualisations.append({
+                        "type": "plotly",
+                        "figure": visualisation["figure"],
+                        "config": visualisation.get("config", {}),
+                        "meta": {
+                            "tool": tool_name
+                        }
+                    })
+
+    return tool_reply, visualisations
 
 # ============================================================================
 # ENDPOINTS
@@ -175,17 +505,17 @@ def _execute_tool_call(tool_name: str, arguments: dict) -> str:
 
 @app.get("/api/health")
 def health():
-    return jsonify({"ok": True, "time": int(time.time())})
+    return jsonify({"ok": True, "time": int(time.time()), "provider": LLM_PROVIDER})
 
 @app.post("/api/chat")
 def chat_non_stream():
     """
     Non-streaming chat: returns JSON { reply: "...", model: "..."}
-    Uses Ollama POST /api/chat with stream:false.
+    LLM-provider agnostic with stream=False.
     """
     data = request.get_json(force=True) or {}
     user_message = (data.get("message") or "").strip()
-    history = _normalize_messages(data.get("history") or [])
+    history = _normalise_messages(data.get("history") or [])
     render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
 
     if not user_message and not render_tools:
@@ -202,107 +532,18 @@ def chat_non_stream():
         if not render_tools:
             messages.append({"role": "user", "content": user_message})
         app.logger.info(f"Chat history for api/chat: {messages}")
-        payload = {
-            "model": data.get("model") or OLLAMA_MODEL,
-            "messages": messages,
-            "stream": False,  # disable streaming
-            "options": data.get("options") or {
-                "temperature": 0.3
-            }
-        }
+        
+        assistant_msg = llm_client.chat(
+            messages=messages,
+            model=data.get("model"),
+            options=data.get("options") or {"temperature": 1},
+        )
 
-        r = requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=300)
-        if r.status_code != 200:
-            return jsonify({"error": "Ollama error", "status": r.status_code, "detail": r.text}), 502
-
-        result = r.json()
-        reply = (result.get("message") or {}).get("content") or ""
-    
-        return jsonify({"reply": reply, "model": payload["model"]})
+        reply = assistant_msg.get("content", "")
+        return jsonify({"reply": reply, "model": data.get("model")})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 502
-
-
-def _chat_with_tools(messages: list, model: str = None, #history: ,
-                    options: dict = None, max_iterations: int = 1):
-    """
-    Chat with tool calling support. Handles tool calls iteratively.
-    Returns: reply
-    """
-    tool_reply = []
-
-    iteration = 0
-    visualisations = []
-    
-    # TODO: why do we need multiple iterations?
-    while iteration < max_iterations:
-        iteration += 1
-        
-        # Call LLM with tools
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "tools": get_tool_schemas(),  # Pass available tools
-            "options": options
-        }
-        
-        r = requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=300)
-        if r.status_code != 200:
-            raise Exception(f"Ollama error: {r.status_code} - {r.text}")
-        
-        result = r.json()
-        assistant_msg = result.get("message") or {}
-        # structure of the assistant_msg: {"message": {"role": ..., "content": ..., "tool_calls": ...}}
-        
-        # Check for tool calls
-        tool_calls = assistant_msg.get("tool_calls") or []
-        app.logger.info(f"tool call result is: {tool_calls}")
-        if not tool_calls:
-            # Add assistant response to tool_reply, and return
-            tool_reply.append({"role": "assistant", "content": []})
-            break
-        
-        # Execute each tool call
-        # TODO: test that when multiple tool calls are detected, whether the reply is correctly formatted.
-        for tool_call in tool_calls:
-            func_info = tool_call.get("function") or {}
-            tool_name = func_info.get("name")
-            tool_args = func_info.get("arguments") or {}
-            
-            # Execute the tool
-            success, tool_result, visualisation = _execute_tool_call(tool_name, tool_args)
-            
-            if not success:
-                # Arguments are incomplete
-                all_tools_valid = False
-                app.logger.warning(f"Tool call validation failed: {tool_result}")
-                
-                # Add a message asking user for input
-                user_input_msg = f"I need more information to call {tool_name}\n: {tool_result}"
-                tool_reply.append({"role": "assistant", "content": user_input_msg})
-                
-            else:
-                # Add tool result to messages
-                args_part = f" with arguments {tool_args}" if tool_args else ""
-                tool_reply.append({
-                    "role": "tool",
-                    "tool_name": tool_name,
-                    "content": f"Tool {tool_name} called{args_part}. Result: {tool_result}"
-                })
-                
-                if visualisation:  # if there is visualisation result
-                    visualisations.append({
-                        "type": "plotly",
-                        "figure": visualisation["figure"],
-                        "config": visualisation.get("config", {}),
-                        "meta": {
-                            "tool": tool_name
-                        }
-                    })
-
-    return tool_reply, visualisations
 
 
 @app.post("/api/chat/tools")
@@ -312,9 +553,9 @@ def chat_with_tools():
     """
     data = request.get_json(force=True) or {}
     user_message = (data.get("message") or "").strip()
-    history = _normalize_messages(data.get("history") or [])
+    history = _normalise_messages(data.get("history") or [])
     system = (data.get("system") or "").strip()
-    model = data.get("model") or TOOL_CALLING_MODEL
+    model = data.get("model")
     
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
@@ -335,15 +576,10 @@ def chat_with_tools():
         reply, _ = _chat_with_tools(
             messages=messages,
             model=model,
-            options=data.get("options") or {"temperature": 0.5}
+            options=data.get("options") or {"temperature": 1}
         )
-        
-        response = {
-            "reply": reply,
-            "model": model
-        }
-        
-        return jsonify(response)
+
+        return jsonify({"reply": reply, "model": model})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 502
@@ -356,10 +592,10 @@ def chat_with_tools_stream():
     """
     data = request.get_json(force=True) or {}    
     user_message = (data.get("message") or "").strip()
-    history = _normalize_messages(data.get("history") or [])
+    history = _normalise_messages(data.get("history") or [])
     system = (data.get("system") or "").strip()
-    model = data.get("model") or OLLAMA_MODEL
-    tool_model = TOOL_CALLING_MODEL
+    model = data.get("model")
+    # tool_model = TOOL_CALLING_MODEL
 
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
@@ -381,56 +617,46 @@ def chat_with_tools_stream():
     try: 
         reply_with_tools, visualisations = _chat_with_tools(
             messages=messages,
-            model=tool_model,
-            options=data.get("options") or {"temperature": 0.3}
+            model=model,
+            options=data.get("options") or {"temperature": 1}
         )
-        app.logger.info(f"Tool calling model: {tool_model}")
+        app.logger.info(f"Tool calling model: {model}")
         app.logger.info(f"Reply from the tool call: {reply_with_tools}")
         messages.extend(reply_with_tools)
         
-        messages_with_tools = _normalize_messages(messages)
+        messages_with_tools = _normalise_messages(messages)
         app.logger.info(f"Messages passed to streaming llm: {messages_with_tools}")
 
-        payload = {
-            "model": model,
-            "messages": messages_with_tools,
-            "render_tools": True,  
-            "stream": True,  # streaming endpoint behaviour
-            "options": data.get("options") or {
-                "temperature": 0.2
-            }
-        }
+        # payload = {
+        #     "model": model,
+        #     "messages": messages_with_tools,
+        #     "render_tools": True,  
+        #     "stream": True,  # streaming endpoint behaviour
+        #     "options": data.get("options") or {
+        #         "temperature": 0.2
+        #     }
+        # }
+
+        payload_model = data.get("final_model") or data.get("model")
 
         def generate():
             assistant_text = ""
-            with requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, stream=True, timeout=300) as r:
-                if r.status_code != 200:
-                    yield f"event: error\ndata: {json.dumps({'status': r.status_code, 'detail': r.text})}\n\n"
+            for chunk, done in llm_client.stream(
+                messages=messages_with_tools,
+                model=payload_model,
+                options=data.get("options") or {"temperature": 1},
+            ):
+                assistant_text += chunk
+                yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
+
+                if done:
+                    messages_with_tools.append({"role": "assistant", "content": assistant_text})
+                    yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
+                    yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
                     return
-                
-                # Each line is a JSON object from Ollama.
-                for line in r.iter_lines(decode_unicode=True):
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-
-                    # incremental token chunk:
-                    chunk = ((obj.get("message") or {}).get("content")) or ""
-                    assistant_text += chunk
-                    done = bool(obj.get("done"))
-                    yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
-
-                    if done:
-                        messages_with_tools.append({"role": "assistant", "content": assistant_text})
-                        app.logger.info(f"Completed response to stream: {messages_with_tools}")
-                        yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
-                        yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
-                        return
 
         return Response(generate(), mimetype="text/event-stream")
+
     except Exception as e:
         return jsonify({"error": str(e)}), 502
 
@@ -439,11 +665,10 @@ def chat_with_tools_stream():
 def chat_stream():
     """
     Streaming chat: returns Server-Sent Events (SSE).
-    Ollama /api/chat streams JSON objects by default.
     """
     data = request.get_json(force=True) or {}
     user_message = (data.get("message") or "").strip()
-    history = _normalize_messages(data.get("history") or [])
+    history = _normalise_messages(data.get("history") or [])
     render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
 
     if not user_message and not render_tools:
@@ -457,47 +682,43 @@ def chat_stream():
     if not render_tools:
         messages.append({"role": "user", "content": user_message})
 
-    payload = {
-        "model": data.get("model") or OLLAMA_MODEL,
-        "messages": messages,
-        "stream": True,  # streaming endpoint behaviour
-        "options": data.get("options") or {
-            "temperature": 0.2
-        }
-    }
+    # payload = {
+    #     "model": data.get("model") or OLLAMA_MODEL,
+    #     "messages": messages,
+    #     "stream": True,  # streaming endpoint behaviour
+    #     "options": data.get("options") or {
+    #         "temperature": 0.2
+    #     }
+    # }
 
     def generate():
-        with requests.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload, stream=True, timeout=300) as r:
-            if r.status_code != 200:
-                yield f"event: error\ndata: {json.dumps({'status': r.status_code, 'detail': r.text})}\n\n"
+        assistant_text = ""
+        for chunk, done in llm_client.stream(
+            messages=messages,
+            model=data.get("model"),
+            options=data.get("options") or {"temperature": 1},
+        ):
+            assistant_text += chunk
+            yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
+
+            if done:
+                yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
                 return
-            # Each line is a JSON object from Ollama.
-            for line in r.iter_lines(decode_unicode=True):
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                # incremental token chunk:
-                chunk = ((obj.get("message") or {}).get("content")) or ""
-                done = bool(obj.get("done"))
-                yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
-
-                if done:
-                    yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
-                    return
 
     return Response(generate(), mimetype="text/event-stream")
 
 @app.get("/api/tools")
 def list_tools():
     """List available tools/functions"""
-    return jsonify({"tools": get_tool_schemas()})
+    return jsonify({"tools": get_tool_schemas(LLM_PROVIDER)})
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 if __name__ == "__main__":
     app.logger.info("Starting Chatbot")
     app.logger.info(f"Host: {FLASK_HOST}, Port: {FLASK_PORT}")
+    app.logger.info(f"LLM Provider: {LLM_PROVIDER}")
     
     app.run(host=FLASK_HOST, port=FLASK_PORT, debug=True)

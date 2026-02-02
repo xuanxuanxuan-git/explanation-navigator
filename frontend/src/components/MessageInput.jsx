@@ -93,10 +93,24 @@ export default function MessageInput({ disabled, onSend }) {
       <button
         disabled={disabled}
         onClick={submit}
-        style={{ padding: '10px 14px', height: 40 }}
+        aria-label="Send"
+        style={{
+          height: 40,
+          width: 40,
+          borderRadius: 8,         
+          border: '1px solid #ddd',
+          background: disabled ? '#e8eefc' : '#2563eb', // blue
+          color: '#fff',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 18,
+          lineHeight: 1,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+        }}
       >
-        Send
+        ↑
       </button>
+
     </div>
   )
 }

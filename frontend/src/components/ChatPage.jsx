@@ -71,6 +71,9 @@ export default function ChatPage() {
       history: backendHistory,
       system,
       // model: 'llama3.2:3b',
+      options: {
+        temperature: 1
+      },
       onToken: (token) => {
         setMessages(prev => {
           const copy = [...prev]
