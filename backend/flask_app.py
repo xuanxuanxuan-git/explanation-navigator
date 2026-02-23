@@ -146,7 +146,7 @@ def get_tool_schemas(provider: Optional[str] = None):
       { "type": "function", "function": { "name": ..., "description": ..., "parameters": ... } }
     """
     provider = (provider or LLM_PROVIDER).lower()
-    needs_wrapped = provider == "ollama" or AZURE_OPENAI_CHAT_DEPLOYMENT == "o3"
+    needs_wrapped = provider == "ollama" or AZURE_OPENAI_CHAT_DEPLOYMENT == "gpt-4.1"  # needs to wrap for gpt-4.1 too
     
     # If the provider is Ollama/o3 but the schema is flat schema,
     # reformat the schema to into Ollama version.
@@ -319,38 +319,6 @@ class AzureOpenAIClient(BaseLLMClient):
             api_version=api_version,
         )
 
-    def _to_openai_messages(self, messages: List[dict]) -> List[dict]:
-        """
-        Convert internal messages to OpenAI-compatible messages,
-        preserving tool_calls and tool_name when present.
-        """
-        out = []
-        for m in messages:
-            role = m.get("role")
-            msg = {"role": role}
-
-            # content (optional for assistant when tool_calls exist)
-            if "content" in m and m["content"] is not None:
-                msg["content"] = m["content"]
-
-            # preserve tool_calls
-            if role == "assistant" and "tool_calls" in m:
-                msg["tool_calls"] = m["tool_calls"]
-
-            # preserve tool_name for tool role
-            if role == "tool":
-                msg["tool_name"] = m.get("tool_name")
-
-            # OpenAI validation rules
-            if role == "assistant" and not msg.get("content") and not msg.get("tool_calls"):
-                continue
-            if role == "tool" and not msg.get("content"):
-                continue
-
-            out.append(msg)
-
-        return out
-    
     def chat(self, messages, model=None, options=None, tools=None):
         response = self.client.chat.completions.create(
             model=model or AZURE_OPENAI_CHAT_DEPLOYMENT,
@@ -408,7 +376,7 @@ llm_client = get_llm_client(LLM_PROVIDER)
 # =============================================================================
 
 def _chat_with_tools(messages: list, model: str = None, #history: ,
-                    options: dict = None, max_iterations: int = 1):
+                    options: dict = None, max_iterations: int = 3):
     """
     Chat with tool calling support. Handles tool calls iteratively.
     Returns: (tool_reply_messages, visualisations)
@@ -418,8 +386,8 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
     iteration = 0
     visualisations = []
     
-    # TODO: why do we need multiple iterations?
     while iteration < max_iterations:
+        app.logger.info(f"Tool iteration {iteration}")
         iteration += 1
         
         assistant_msg = llm_client.chat(
@@ -441,15 +409,17 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
             })
             break
         
-        # Append assistant tool-call message (CRITICAL for OpenAI/Gemini)
-        tool_reply.append({
+        # Append assistant tool-call message 
+        assistant_tool_msg = {
             "role": "assistant",
             "content": assistant_msg.get("content", ""),
             "tool_calls": tool_calls,
-        })
+        }
+
+        tool_reply.append(assistant_tool_msg)
+        messages.append(assistant_tool_msg)
 
         # Execute each tool call
-        # TODO: test that when multiple tool calls are detected, whether the reply is correctly formatted.
         for tool_call in tool_calls:
             func_info = tool_call.get("function") or {}
             tool_name = func_info.get("name")
@@ -472,19 +442,28 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                 app.logger.warning(f"Tool call validation failed: {tool_result}")
                 
                 # Add a message asking user for input
-                tool_reply.append({
+                tool_msg = {
                     "role": "tool",
-                    "tool_call_id": tool_call.get("id"),  #"tool_name": tool_name,
-                    "content": f"ERROR: {tool_result}"})
+                    "tool_call_id": tool_call.get("id"),
+                    "content": f"ERROR: {tool_result}",
+                }
 
+                tool_reply.append(tool_msg)
+                messages.append(tool_msg)
+
+                # Stop loop so model can ask user for missing arguments
+                break
             else:
                 # Add tool result to messages
                 # args_part = f" with arguments {tool_args}" if tool_args else ""
-                tool_reply.append({
+                tool_msg = {
                     "role": "tool",
-                    "tool_call_id": tool_call.get("id"),  #"tool_name": tool_name,
-                    "content": f"{tool_result}" #Tool {tool_name} called{args_part}. Result: 
-                })
+                    "tool_call_id": tool_call.get("id"),
+                    "content": f"{tool_result}",
+                }
+
+                tool_reply.append(tool_msg)
+                messages.append(tool_msg)
                 
                 if visualisation:  # if there is visualisation result
                     visualisations.append({

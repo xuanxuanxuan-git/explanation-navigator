@@ -24,7 +24,7 @@ export default function ChatPage() {
   }, [messages, busy])
   
   const system = useMemo(
-    () => 'You are a helpful assistant. Keep answers concise. Do not flatter. If a tool returned a missing argument, ask the user to provide it.',
+    () => 'You are a helpful assistant. Keep answers concise. Do not flatter. If a tool returned a missing argument, ask the user to provide it. Available features include MedInc (median income), AveBedrms (average number of bedrooms), AveRooms (average rooms), AveOccup (average number of occupants, HouseAge (house age), population, longitude and latitude.',
     []
   )
 

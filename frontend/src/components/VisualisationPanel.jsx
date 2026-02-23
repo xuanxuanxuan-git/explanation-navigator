@@ -7,7 +7,7 @@ export default function VisualisationPanel({ visualisations }) {
   if (!visualisations?.length) {
     return (
       <div style={{ padding: 16, color: '#666' }}>
-        Tool figures will appear here.
+        Figures will appear here.
       </div>
     )
   }
