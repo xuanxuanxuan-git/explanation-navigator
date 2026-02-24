@@ -137,7 +137,11 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
 
     rows = _local_rows(instance_id)
     rows_sorted = sorted(rows, key=lambda r: abs(r["shap_value"]), reverse=True)[:max_display]
-
+    # round to 4 dp for returned data
+    rows_sorted = [
+        {"feature": r["feature"], "shap_value": round(float(r["shap_value"]), 4)}
+        for r in rows_sorted
+    ]
     # For horizontal bars: feature names on Y, SHAP values on X
     features = [r["feature"] for r in rows_sorted][::-1]
     values = [r["shap_value"] for r in rows_sorted][::-1]
@@ -181,6 +185,9 @@ def generate_shap_summary_plot(max_display: int = 10):
     mean_abs = np.mean(np.abs(shap_values), axis=0)
     rows = [{"feature": f, "mean_abs_shap": float(v)} for f, v in zip(feature_names, mean_abs)]
     rows_sorted = sorted(rows, key=lambda r: r["mean_abs_shap"], reverse=True)[:max_display]
+    rows_sorted = [
+    {"feature": r["feature"], "mean_abs_shap": round(float(r["mean_abs_shap"]), 4)} for r in rows_sorted
+    ]
 
     y = [r["feature"] for r in rows_sorted][::-1]
     x = [r["mean_abs_shap"] for r in rows_sorted][::-1]
