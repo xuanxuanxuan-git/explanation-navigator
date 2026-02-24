@@ -381,6 +381,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
     Chat with tool calling support. Handles tool calls iteratively.
     Returns: (tool_reply_messages, visualisations)
     """
+    local_messages = list(messages)     # create a local copy
     tool_reply = []
 
     iteration = 0
@@ -391,7 +392,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
         iteration += 1
         
         assistant_msg = llm_client.chat(
-            messages=messages,
+            messages=local_messages,
             model=model,
             options=options,
             tools=get_tool_schemas(LLM_PROVIDER),
@@ -417,7 +418,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
         }
 
         tool_reply.append(assistant_tool_msg)
-        messages.append(assistant_tool_msg)
+        local_messages.append(assistant_tool_msg)
 
         # Execute each tool call
         for tool_call in tool_calls:
@@ -437,43 +438,33 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
             # Execute the tool
             success, tool_result, visualisation = _execute_tool_call(tool_name, tool_args)
             
+            tool_msg = {
+                "role": "tool",
+                "tool_call_id": tool_call.get("id"),
+                "content": (
+                    f"{tool_result}"
+                    if success                      # Add tool result to messages
+                    else f"ERROR: {tool_result}"    # Add a message asking user for input
+                ),
+            }
+            tool_reply.append(tool_msg)
+            local_messages.append(tool_msg)
+            
             if not success:
                 # Arguments are incomplete
                 app.logger.warning(f"Tool call validation failed: {tool_result}")
-                
-                # Add a message asking user for input
-                tool_msg = {
-                    "role": "tool",
-                    "tool_call_id": tool_call.get("id"),
-                    "content": f"ERROR: {tool_result}",
-                }
-
-                tool_reply.append(tool_msg)
-                messages.append(tool_msg)
 
                 # Stop loop so model can ask user for missing arguments
                 break
-            else:
-                # Add tool result to messages
-                # args_part = f" with arguments {tool_args}" if tool_args else ""
-                tool_msg = {
-                    "role": "tool",
-                    "tool_call_id": tool_call.get("id"),
-                    "content": f"{tool_result}",
-                }
-
-                tool_reply.append(tool_msg)
-                messages.append(tool_msg)
-                
-                if visualisation:  # if there is visualisation result
-                    visualisations.append({
-                        "type": "plotly",
-                        "figure": visualisation["figure"],
-                        "config": visualisation.get("config", {}),
-                        "meta": {
-                            "tool": tool_name
-                        }
-                    })
+            if visualisation:  # if there is visualisation result
+                visualisations.append({
+                    "type": "plotly",
+                    "figure": visualisation["figure"],
+                    "config": visualisation.get("config", {}),
+                    "meta": {
+                        "tool": tool_name
+                    }
+                })
 
     return tool_reply, visualisations
 
