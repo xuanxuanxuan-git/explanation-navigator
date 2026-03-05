@@ -4,36 +4,39 @@ import MessageInput from './MessageInput.jsx'
 import { chatOnce, chatWithToolsStream } from '../api.js'
 import VisualisationPanel from './VisualisationPanel.jsx'
 
+const SUGGESTED_QUESTIONS = [
+  "Why do I get this prediction?",
+  "What is the most important feature for instance 2?",
+  "What is the average model prediction?",
+]
+
 export default function ChatPage() {
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hi! Ask a question.' }
   ])
   const [busy, setBusy] = useState(false)
-  const messagesEndRef = useRef(null)
   const [useStreaming, setUseStreaming] = useState(true)
   const [visualisations, setVisualisations] = useState([])
   const [backendHistory, setBackendHistory] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(true)
+  const messagesEndRef = useRef(null)
 
-  // const [useToolCalling, setUseToolCalling] = useState(false)
-  
   // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({
-      behavior: "smooth"
-    });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, busy])
-  
+
   const system = useMemo(
-    () => 'You are a helpful assistant. Keep answers concise. Do not flatter. If a tool returned a missing argument, ask the user to provide it. Available features include MedInc (median income), AveBedrms (average number of bedrooms), AveRooms (average rooms), AveOccup (average number of occupants, HouseAge (house age), population, longitude and latitude.',
+    () =>
+      'You are a helpful assistant. Keep answers concise. Do not flatter. If a tool returned a missing argument, ask the user to provide it. Available features include MedInc (median income), AveBedrms (average number of bedrooms), AveRooms (average rooms), AveOccup (average number of occupants), HouseAge (house age), population, longitude and latitude.',
     []
   )
 
-  // const historyForBackend = useMemo(() => {
-  //   // send everything except the first assistant greeting if desired; keep it simple:
-  //   return messages.filter(m => m.role !== 'assistant' || m.content !== 'Hi! Ask a question.')
-  // }, [messages])
-
   async function handleSend(text) {
+    if (!text?.trim()) return
+
+    setShowSuggestions(false)
+
     const userMsg = { role: 'user', content: text }
     setMessages(prev => [...prev, userMsg])
 
@@ -42,9 +45,8 @@ export default function ChatPage() {
       try {
         const res = await chatOnce({
           message: text,
-          history: backendHistory,  // TODO: update the history, typing bubble
-          system,
-          // model: 'llama3.2:3b'
+          history: backendHistory,
+          system
         })
         setMessages(prev => [...prev, { role: 'assistant', content: res.reply }])
         setVisualisations([])
@@ -58,22 +60,14 @@ export default function ChatPage() {
 
     // streaming
     setBusy(true)
-    let assistantIndex = -1
-    setMessages(prev => {
-      assistantIndex = prev.length + 1
-      return [...prev, { role: 'assistant', content: ''}]
-    })
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
     setVisualisations([])
 
-    // call the following function defined in api.js
     chatWithToolsStream({
       message: text,
       history: backendHistory,
       system,
-      // model: 'llama3.2:3b',
-      options: {
-        temperature: 1
-      },
+      options: { temperature: 1 },
       onToken: (token) => {
         setMessages(prev => {
           const copy = [...prev]
@@ -101,38 +95,109 @@ export default function ChatPage() {
     })
   }
 
+  const showInitialSuggestions =
+    showSuggestions &&
+    !busy &&
+    messages.filter(m => m.role === 'user').length === 0
+
   return (
     <div style={{ display: 'flex', gap: 12, height: '80vh', padding: 12 }}>
-    {/* Left side - Visualisations */}
+    {/* Left side: Visualisations */}
     <div style={{ flex: 0.4, border: '1px solid #ddd', borderRadius: 8, overflow: 'auto', background: '#fafafa' }}>
       <VisualisationPanel visualisations={visualisations} />
     </div>
 
-    {/* Right side - Chat */}
-    <div style={{ flex: 0.6, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f5f5', padding: '8px 12px', borderRadius: 6, fontSize: 12 }}>
-          <input
-            type="checkbox"
-            checked={useStreaming}
-            onChange={(e) => setUseStreaming(e.target.checked)}
-          />
-          Use streaming responses with tools
-        </label>
-        <span style={{ fontSize: 12, color: '#666' }}>
-          {useStreaming ? 'Tools + Streaming' : 'Non-streaming'}
-        </span>
+      {/* Right side: Chat */}
+      <div style={{ flex: 0.6, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+
+        {/* Chat Container */}
+        <div style={{
+          border: '1px solid #ddd',
+          borderRadius: 8,
+          padding: 12,
+          flex: 1,
+          overflow: 'auto',
+          background: 'white'
+        }}>
+          <MessageList messages={messages} busy={busy} />
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Floating Dialogue Suggestion Box */}
+        {showInitialSuggestions && (
+          <div style={{
+            position: 'absolute',
+            bottom: 70,
+            right: 20,
+            width: 320,
+            background: 'white',
+            borderRadius: 16,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+            border: '1px solid #e5e7eb',
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            animation: 'fadeSlide 0.4s ease forwards',
+            zIndex: 10
+          }}>
+            <div style={{
+              fontWeight: 600,
+              fontSize: 13,
+              color: '#374151',
+              marginBottom: 4
+            }}>
+              Try asking:
+            </div>
+
+            {SUGGESTED_QUESTIONS.map((q, idx) => (
+              <div
+                key={idx}
+                onClick={() => handleSend(q)}
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  background: '#f3f4f6',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.target.style.background = '#2563eb'
+                  e.target.style.color = 'white'
+                }}
+                onMouseLeave={e => {
+                  e.target.style.background = '#f3f4f6'
+                  e.target.style.color = '#111'
+                }}
+              >
+                {q}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{ marginTop: 10 }}>
+          <MessageInput disabled={busy} onSend={handleSend} />
+        </div>
       </div>
 
-      <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, flex: 1, overflow: 'auto' }}>
-        <MessageList messages={messages}  busy={busy} />
-        <div ref={messagesEndRef} />
-      </div>
+      <style>
+        {`
+          @keyframes fadeSlide {
+            from {
+              opacity: 0;
+              transform: translateY(15px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `}
+      </style>
 
-      <div style={{ marginTop: 10 }}>
-        <MessageInput disabled={busy} onSend={handleSend} />
-      </div>
     </div>
-  </div>
-)
+  )
 }
