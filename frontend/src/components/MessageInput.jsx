@@ -3,13 +3,11 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 export default function MessageInput({ disabled, onSend }) {
   const [text, setText] = useState('')
   const inputRef = useRef(null)
-  const MAX_HEIGHT = 280 // px (adjust to taste)
+  const MAX_HEIGHT = 280 // px 
 
   // Focus on initial mount and whenever the input becomes enabled again.
   useEffect(() => {
-    if (!disabled) {
-      inputRef.current?.focus()
-    }
+    if (!disabled) inputRef.current?.focus()
   }, [disabled])
 
   // Auto-resize on text changes
@@ -22,7 +20,7 @@ export default function MessageInput({ disabled, onSend }) {
     el.style.height = `${next}px`
     el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden'
     
-      // Only auto-scroll if cursor is at the end
+    // Only auto-scroll if cursor is at the end
     if (el.selectionStart === text.length) {
       el.scrollTop = el.scrollHeight
     }
@@ -42,7 +40,6 @@ export default function MessageInput({ disabled, onSend }) {
     // Optional: attempt focus immediately (useEffect will also refocus once enabled)
     inputRef.current?.focus()
   }
-
 
   function onKeyDown(e) {
     if (e.key === 'Enter' || e.key === 'Return') {
@@ -67,7 +64,7 @@ export default function MessageInput({ disabled, onSend }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
       <textarea
         ref={inputRef}
         value={text}
@@ -75,10 +72,10 @@ export default function MessageInput({ disabled, onSend }) {
         onKeyDown={onKeyDown}
         disabled={disabled}
         rows={1}
-        placeholder={disabled ? 'Waiting for model...' : 'Type a message...'}
+        placeholder={disabled ? 'Waiting for answer...' : 'Type a message...'}
         style={{
           flex: 1,
-          padding: 10,
+          padding: '10px 12px',
           borderRadius: 8,
           border: '1px solid #ddd',
           resize: 'none',
@@ -87,9 +84,10 @@ export default function MessageInput({ disabled, onSend }) {
           overflowY: 'hidden',   // actual toggle happens in JS above
           boxSizing: 'border-box',
           fontFamily: 'inherit',
+          fontSize: 14,
         }}
       />
-
+  
       <button
         disabled={disabled}
         onClick={submit}
@@ -110,7 +108,6 @@ export default function MessageInput({ disabled, onSend }) {
       >
         ↑
       </button>
-
     </div>
   )
 }
