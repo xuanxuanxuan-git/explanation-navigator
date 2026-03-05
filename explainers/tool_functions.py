@@ -460,8 +460,8 @@ def resolve_feature_name():
 
 
 available_tools_mapping = {
-    "generate_shap_bar_plot": generate_shap_bar_plot,
-    "generate_shap_summary_plot": generate_shap_summary_plot,
+    "generate_local_shap_bar_plot": generate_shap_bar_plot,
+    "generate_global_shap_summary_plot": generate_shap_summary_plot,
     # "get_feature_attribution_ranking": get_feature_attribution_ranking,
     "get_individual_prediction": get_individual_prediction,
     "get_average_prediction": get_average_prediction,

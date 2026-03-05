@@ -41,14 +41,25 @@ class PredictWithFeatureChanges(BaseModel):
 explainer_tools = [
     {
         "type": "function",
-        "name": "generate_shap_bar_plot",
-        "description": "LOCAL explanation (single instance). Use this when the user asks why the model predicted a certain outcome for ONE specific instance/row. It shows per-feature SHAP contributions for that instance only (not global importance).", 
+        "name": "generate_local_shap_bar_plot",
+        "description": "Provides LOCAL feature importance for a SINGLE instance using SHAP values. "
+        "Use this when the user asks why the model made a prediction for a specific instance, "
+        "row, example, or ID (e.g., 'instance 1', 'this prediction'). "
+        "The plot shows how each feature contributed to that instance's prediction. "
+        "This explanation applies only to the selected instance and does NOT represent "
+        "feature importance across the dataset.", 
         "parameters": ShapBarPlot.model_json_schema(),
     },
     {
         "type": "function",
-        "name": "generate_shap_summary_plot",
-        "description": "GLOBAL explanation (dataset-level). Use this when the user asks which features are important overall across all instances (global feature importance). This aggregates SHAP values over the whole test set. Do NOT use this for a single instance.",
+        "name": "generate_global_shap_summary_plot",
+        "description": "Provides GLOBAL feature importance across the entire dataset using SHAP values. "
+        "Use this when the user asks which features are most important overall in the model "
+        "or across all instances (e.g., 'Which features matter most?', 'What are the most "
+        "important features in the model?'). The plot aggregates SHAP values across the "
+        "dataset to show which features generally have the largest impact on predictions. "
+        "This explanation reflects overall model behaviour and should NOT be used for "
+        "questions about a specific instance, row, or prediction.", 
         "parameters": {
             "type": "object",
             "properties": {},
