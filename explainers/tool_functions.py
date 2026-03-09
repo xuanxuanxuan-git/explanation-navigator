@@ -8,6 +8,7 @@ import shap
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -124,6 +125,9 @@ def _maybe_json_loads(x):
             return x
     return x
 
+def _euclidean_distance(a, b):
+    return np.sqrt(np.sum((a - b) ** 2))
+
 # ----------------------------
 # Tools
 # ----------------------------
@@ -169,7 +173,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_bar_plot", "instance_id": instance_id}),
     }
 
-
+# TODO: generate feature importance for filter group
 def generate_shap_summary_plot(max_display: int = 10):
     """
     SHAP-like global summary.
@@ -215,20 +219,6 @@ def generate_shap_summary_plot(max_display: int = 10):
     }
 
 
-def get_feature_attribution_ranking(instance_id: int):
-    """
-    Returns local ranking sorted by abs(shap_value) desc.
-    """
-    _init_if_needed()
-    instance_id = int(instance_id)
-    _check_instance_id(instance_id)
-
-    rows = _local_rows(instance_id)
-    rows_sorted = sorted(rows, key=lambda r: abs(r["shap_value"]), reverse=True)
-
-    return {"data": rows_sorted, "visualisation": None}
-
-
 def get_individual_prediction(instance_id: int):
     _init_if_needed()
     instance_id = int(instance_id)
@@ -242,7 +232,11 @@ def get_individual_prediction(instance_id: int):
     pred = float(model.predict(scaler.transform(x))[0])
 
     return {
-        "data": {"instance_id": instance_id, "probability": round(pred, 2)},
+        "data": {"instance_id": instance_id,
+        "instance_features": {
+            col: float(X_test.iloc[instance_id][col]) for col in X_test.columns
+        },
+        "predicted_price": round(pred, 2)},
         "visualisation": None,
     }
 
@@ -330,7 +324,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             ),
         ],
         layout=go.Layout(
-            title=f"CP plot — instance {instance_id}, feature: {feature}",
+            title=f"CP plot -- instance {instance_id}, feature: {feature}",
             xaxis={"title": feature},
             yaxis={"title": "Model prediction"},
             margin={"l": 60, "r": 20, "t": 55, "b": 40},
@@ -353,7 +347,134 @@ def get_counterfactual_explanation():
     return
 
 
+def get_similar_instances(instance_id: int, k: int = 3):
+    """
+    Get other instances that are predicted with similar prices
+    """
+    _init_if_needed()
 
+    instance_id = int(instance_id)
+    k = int(k)
+
+    _check_instance_id(instance_id)
+
+    X_test = _STATE["X_test"]
+    X_scaled = _STATE["X_test_scaled"]
+    y_test = _STATE["y_test"]
+
+    query_vec = X_scaled[instance_id]
+
+    distances = []
+
+    for i in range(len(X_scaled)):
+        if i == instance_id:
+            continue
+
+        dist = _euclidean_distance(query_vec, X_scaled[i])
+
+        distances.append((i, dist))
+
+    distances.sort(key=lambda x: x[1])
+
+    top = distances[:k]
+
+    rows = []
+    indices = []
+
+    for idx, dist in top:
+        indices.append(int(idx))
+        rows.append({
+            "instance_id": int(idx),
+            "instance_features": {
+                col: float(X_test.iloc[idx][col]) for col in X_test.columns
+            },
+            "prediction": round(float(_STATE["model"].predict([X_scaled[idx]])[0]), 2),
+            # "target": float(y_test[idx])
+        })
+
+    return {
+        "data": {
+            "query_instance": instance_id,
+            "k": k,
+            "indices": indices,
+            "instances": rows
+        },
+        "visualisation": None,
+    }
+
+# TODO: get representative instances for certain prediction class
+# TODO: combine with get_subgroup
+def get_representative_instances(filters: dict, k: int = 3):
+    """
+    Return k representative instances for a filtered subgroup.
+    """
+    _init_if_needed()
+
+    filters = _maybe_json_loads(filters)
+    k = int(k)
+
+    subgroup = get_subgroup(filters)
+
+    indices = subgroup["data"]["indices"]
+
+    if len(indices) == 0:
+        return {
+            "data": {
+                "message": "No instances found for the specified filters.",
+                "filters": filters,
+                "indices": []
+            },
+            "visualisation": None
+        }
+
+    X_scaled = _STATE["X_test_scaled"]
+    X_test = _STATE["X_test"]
+    model = _STATE["model"]
+    # Ensure k is valid
+    k = min(k, len(indices))
+
+    subgroup_vectors = X_scaled[indices]
+
+    centroid = np.mean(subgroup_vectors, axis=0)
+
+    distances = []
+
+    for idx in indices:
+        vec = X_scaled[idx]
+        dist = _euclidean_distance(vec, centroid)
+        distances.append((idx, dist))
+
+    distances.sort(key=lambda x: x[1])
+
+    top = distances[:k]
+
+    rows = []
+    rep_indices = []
+
+    for idx, dist in top:
+        rep_indices.append(int(idx))
+        rows.append({
+            "instance_id": int(idx),
+            "instance_features": {
+                col: float(X_test.iloc[idx][col]) for col in X_test.columns
+            },
+            "prediction": round(float(model.predict([X_scaled[idx]])[0]), 4),
+            # "target": float(y_test[idx])
+        })
+
+    return {
+        "data": {
+            "filters": filters,
+            "group_size": len(indices),
+            "representative_indices": rep_indices,
+            "instances": rows
+        },
+        "visualisation": None,
+    }
+
+# TODO: check the filters correspond to the exact feature name
+# TODO: also filter based on the predicted price
+# example: what percentage of houses have more than 1.3 in price?
 def get_subgroup(filters: dict, limit: int = 500):
     _init_if_needed()
     X_test = _STATE["X_test"]
@@ -413,7 +534,6 @@ def get_subgroup(filters: dict, limit: int = 500):
     }
 
 
-
 def predict_with_feature_changes(instance_id: int, changes: dict):
     """
     changes example:
@@ -454,20 +574,99 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
+# TODO: maybe show feature distribution?
+def dataset_meta():
+    """
+    Return high-level information about the dataset used by the model.
+    """
+    _init_if_needed()
 
-def resolve_feature_name():
-    pass
+    X_train = _STATE["X_train"]
+    # X_test = _STATE["X_test"]
+    y_train = _STATE["y_train"]
+    # y_test = _STATE["y_test"]
+
+    # X_all = pd.concat([X_train, X_test], axis=0)
+    # y_all = np.concatenate([y_train, y_test])
+
+    feature_stats = {}
+
+    for col in X_train.columns:
+        s = X_train[col].astype(float)
+
+        feature_stats[col] = {
+            "mean": round(float(s.mean()), 3),
+            "min": round(float(s.min()), 3),
+            "max": round(float(s.max()), 3),
+            "std": round(float(s.std()), 3),
+        }
+
+    return {
+        "data": {
+            "dataset_name": "California Housing",
+            # "total_instances": int(len(X_all)),
+            "train_instances": int(len(X_train)),
+            # "test_instances": int(len(X_test)),
+            "num_features": int(len(X_train.columns)),
+            "features": X_train.columns.tolist(),
+            "target": "MedianHouseValue",
+            "target_statistics": {
+                "mean": round(float(np.mean(y_train)), 3),
+                "min": round(float(np.min(y_train)), 3),
+                "max": round(float(np.max(y_train)), 3),
+                "std": round(float(np.std(y_train)), 3),
+            },
+            "feature_statistics": feature_stats
+        },
+        "visualisation": None,
+    }
+
+def model_meta():
+    """
+    Return high-level information about the trained model.
+    """
+    _init_if_needed()
+
+    model = _STATE["model"]
+    scaler = _STATE["scaler"]
+
+    X_test = _STATE["X_test"]
+    y_test = _STATE["y_test"]
+
+    X_scaled = scaler.transform(X_test)
+
+    preds = model.predict(X_scaled)
+
+    rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
+    mae = float(mean_absolute_error(y_test, preds))
+    r2 = float(r2_score(y_test, preds))
+
+    return {
+        # "data": {
+            "model_type": "Random Forest Regressor",
+            "prediction_task": "Predicting median house price in California districts",
+            "evaluation_metrics": {
+                "RMSE": round(rmse, 3),
+                "MAE": round(mae, 3),
+                "R2_score": round(r2, 3)
+            # },
+        },
+        "visualisation": None,
+    }
 
 
 available_tools_mapping = {
     "generate_local_shap_bar_plot": generate_shap_bar_plot,
     "generate_global_shap_summary_plot": generate_shap_summary_plot,
-    # "get_feature_attribution_ranking": get_feature_attribution_ranking,
     "get_individual_prediction": get_individual_prediction,
     "get_average_prediction": get_average_prediction,
     "get_cp_plot": get_cp_plot,
     "get_counterfactual_explanation": get_counterfactual_explanation,
     "get_subgroup": get_subgroup,
     "predict_with_feature_changes": predict_with_feature_changes,
+    "get_similar_instances": get_similar_instances,
+    "get_representative_instances": get_representative_instances,
+    "dataset_meta": dataset_meta,
+    "model_meta": model_meta,
 }
         

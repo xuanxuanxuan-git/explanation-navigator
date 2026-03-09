@@ -38,6 +38,27 @@ class PredictWithFeatureChanges(BaseModel):
         )
     )
 
+class SimilarInstances(BaseModel):
+    instance_id: int = Field(
+        description="Index of the query instance (0-based) whose similar instances should be retrieved."
+    )
+    k: int = Field(
+        default=3,
+        description="Number of similar instances to return."
+    )
+
+class RepresentativeInstances(BaseModel):
+    filters: Dict[str, Condition] = Field(
+        description=(
+            "Feature filters defining a subgroup of instances. "
+            "Example: {'AveRooms': {'op': '>', 'value': 5}} to select houses with more than 5 rooms."
+        )
+    )
+    k: int = Field(
+        default=3,
+        description="Number of representative instances to return for the subgroup."
+    )
+
 explainer_tools = [
     {
         "type": "function",
@@ -69,7 +90,7 @@ explainer_tools = [
     {
         "type": "function",
         "name": "get_individual_prediction",
-        "description": "Return the model prediction for a specific instance.",
+        "description": "Return the predicted house price for a specific instance, along with all the feature values of that instance.",
         "parameters": IndividualPrediction.model_json_schema(),
     },
     {
@@ -126,6 +147,58 @@ explainer_tools = [
             Example for 'change bedrooms to 1 for instance 2': {\"instance_id\": 2, \"changes\": {\"AveBedrms\": 1}}
         """,
         "parameters": PredictWithFeatureChanges.model_json_schema(), 
+    },
+    {
+        "type": "function",
+        "name": "get_similar_instances",
+        "description": (
+            "Find instances in the dataset that are most similar to a given instance based on their feature values. "
+            "Use this when the user asks for examples similar to a specific house or wants to compare an instance with other similar instances. "
+            "The tool returns the indices and features of the most similar instances."
+        ),
+        "parameters": SimilarInstances.model_json_schema(),
+    },
+    {
+        "type": "function",
+        "name": "get_representative_instances",
+        "description": (
+            "Find representative instances for a subgroup of the dataset defined by feature filters. "
+            "Use this when the user asks for typical or representative examples "
+            "of houses that satisfy certain conditions (e.g., 'houses with many rooms'). "
+            "The tool identifies instances closest to the group's centroid in feature space."
+        ),
+        "parameters": RepresentativeInstances.model_json_schema(),
+    },
+    {
+        "type": "function",
+        "name": "dataset_meta",
+        "description": (
+            "Provide general information about the dataset used by the AI model. "
+            "Use this when the user asks questions like "
+            "'What data was used to train the model?', "
+            "'How many houses are in the dataset?', or "
+            "'What features describe the houses?'. "
+            "The tool returns dataset size, feature names, and statistics of each feature such as average, min, max."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
+    },
+    {
+        "type": "function",
+        "name": "model_meta",
+        "description": (
+            "Provide general information about the AI model used to make predictions. "
+            "Use this when the user asks about how the model works, what algorithm it uses, or how accurate it is. "
+            "The tool returns the model type, prediction task, and evaluation metrics."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        },
     },
     {
         "type": "function",
