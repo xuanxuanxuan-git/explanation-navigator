@@ -32,6 +32,19 @@ _STATE = {
     "expected_value": None,       # float
 }
 
+_OP_MAP = {
+    ">": ">",
+    ">=": ">=",
+    "<": "<",
+    "<=": "<=",
+    "==": "==",
+    "gt": ">",
+    "ge": ">=",
+    "lt": "<",
+    "le": "<=",
+    "eq": "==",
+}
+
 def _init_if_needed(n_points=1000, test_size=0.2, random_state=42):
     if _STATE["ready"]:
         return
