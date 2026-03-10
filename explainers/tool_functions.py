@@ -32,19 +32,6 @@ _STATE = {
     "expected_value": None,       # float
 }
 
-_OP_MAP = {
-    ">": ">",
-    ">=": ">=",
-    "<": "<",
-    "<=": "<=",
-    "==": "==",
-    "gt": ">",
-    "ge": ">=",
-    "lt": "<",
-    "le": "<=",
-    "eq": "==",
-}
-
 def _init_if_needed(n_points=1000, test_size=0.2, random_state=42):
     if _STATE["ready"]:
         return
@@ -173,28 +160,51 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_bar_plot", "instance_id": instance_id}),
     }
 
-# TODO: generate feature importance for filter group
-def generate_shap_summary_plot(max_display: int = 10):
+def generate_shap_summary_plot(source: str = "all", indices=None, max_display: int = 10):
     """
-    SHAP-like global summary.
+    Generate a SHAP summary plot for either the whole dataset or a subset of instances.
+
+    source: "all" or "indices"
+    indices: optional list[int] (e.g. returned by get_subgroup)
     """
     _init_if_needed()
+
+    source = (source or "all").strip().lower()
     max_display = int(max_display)
 
     X_test = _STATE["X_test"]
     shap_values = _STATE["shap_values"]
 
+    if source == "all":
+        X = X_test
+        shap_subset = shap_values
+
+    elif source == "indices":
+        if not isinstance(indices, list) or len(indices) == 0:
+            return {"data": "indices must be a non-empty list when source='indices'.", "visualisation": None}
+
+        idx = [int(i) for i in indices if 0 <= int(i) < len(X_test)]
+        if not idx:
+            return {"data": "No valid indices provided.", "visualisation": None}
+
+        X = X_test.iloc[idx]
+        shap_subset = shap_values[idx]
+
+    else:
+        return {"data": f"Unknown source='{source}'. Use 'all' or 'indices'.", "visualisation": None}
+
     feature_names = X_test.columns.tolist()
 
-    mean_abs = np.mean(np.abs(shap_values), axis=0)
+    mean_abs = np.mean(np.abs(shap_subset), axis=0)
+
     rows = [{"feature": f, "mean_abs_shap": float(v)} for f, v in zip(feature_names, mean_abs)]
     rows_sorted = sorted(rows, key=lambda r: r["mean_abs_shap"], reverse=True)[:max_display]
-    rows_sorted = [
-    {"feature": r["feature"], "mean_abs_shap": round(float(r["mean_abs_shap"]), 4)} for r in rows_sorted
-    ]
+    rows_sorted = [{"feature": r["feature"], "mean_abs_shap": round(float(r["mean_abs_shap"]), 4)} for r in rows_sorted]
 
     y = [r["feature"] for r in rows_sorted][::-1]
     x = [r["mean_abs_shap"] for r in rows_sorted][::-1]
+
+    title = "Global feature importance" if source == "all" else "Feature importance for selected subgroup"
 
     fig = go.Figure(
         data=[go.Bar(
@@ -206,7 +216,7 @@ def generate_shap_summary_plot(max_display: int = 10):
             hovertemplate="Feature: %{y}<br>Mean |SHAP|: %{x:.4f}<extra></extra>",
         )],
         layout=go.Layout(
-            title="Global feature importance",
+            title=title,
             xaxis={"title": "Mean |SHAP|"},
             yaxis={"title": "Feature"},
             margin={"l": 120, "r": 20, "t": 55, "b": 40},
@@ -214,7 +224,11 @@ def generate_shap_summary_plot(max_display: int = 10):
     )
 
     return {
-        "data": rows_sorted,
+        "data": {
+            "source": source,
+            "count": int(len(X)),
+            "features": rows_sorted,
+        },
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_summary_plot", "kind": "bar"}),
     }
 
@@ -259,7 +273,7 @@ def get_average_prediction(source: str = "all", indices=None):
         if not isinstance(indices, list) or len(indices) == 0:
             return {"data": "indices must be a non-empty list when source='indices'.", "visualisation": None}
         # validate and slice
-        idx = [int(i) for i in indices if 0 <= int(i) < len(X_test)]
+        idx = [int(i) for i in set(indices) if 0 <= int(i) < len(X_test)]
         if not idx:
             return {"data": "No valid indices provided.", "visualisation": None}
         X = X_test.iloc[idx]
@@ -267,11 +281,12 @@ def get_average_prediction(source: str = "all", indices=None):
         return {"data": f"Unknown source='{source}'. Use 'test' or 'indices'.", "visualisation": None}
 
     preds = model.predict(scaler.transform(X)).astype(float)
+    avg = float(np.mean(preds))
     return {
         "data": {
             "source": source,
             "count": int(len(X)),
-            "average_prediction": float(np.mean(preds)),
+            "average_prediction": round(avg, 4),
         },
         "visualisation": None,
     }
@@ -404,6 +419,7 @@ def get_similar_instances(instance_id: int, k: int = 3):
 
 # TODO: get representative instances for certain prediction class
 # TODO: combine with get_subgroup
+# this is too slow to compute
 def get_representative_instances(filters: dict, k: int = 3):
     """
     Return k representative instances for a filtered subgroup.
@@ -472,23 +488,42 @@ def get_representative_instances(filters: dict, k: int = 3):
         "visualisation": None,
     }
 
-# TODO: check the filters correspond to the exact feature name
-# TODO: also filter based on the predicted price
-# example: what percentage of houses have more than 1.3 in price?
-def get_subgroup(filters: dict, limit: int = 500):
+def get_subgroup(filters: dict):
     _init_if_needed()
+
     X_test = _STATE["X_test"]
-    limit = int(limit)
+    model = _STATE["model"]
+    scaler = _STATE["scaler"]
 
     # If filters accidentally comes as a JSON string, parse it
     filters = _maybe_json_loads(filters)
     if not isinstance(filters, dict):
-        return {"data": {"size": 0, "indices": [], "filters": filters}, "visualisation": None}
+        return {"data": {"size": 0, "indices": [], "filters": filters, "invalid_filters": ["filters must be a dictionary"]}, "visualisation": None}
 
     df = X_test.copy()
+
+    # Add predicted price column so it can be filtered
+    preds = model.predict(scaler.transform(X_test))
+    df["predicted_price"] = preds
+
+    valid_features = set(df.columns)
+    invalid_filters = []
+
+    # Validate filters first
+    for feat in filters.keys():
+        if feat not in valid_features:
+            invalid_filters.append(feat)
+
+    # If invalid filter exists -> stop
+    if invalid_filters:
+        return {
+            "data": {"size": 0, "indices": [], "filters": filters, "invalid_filters": invalid_filters,
+                "available_features": list(valid_features),},
+            "visualisation": None,
+        }
+
     for feat, cond in filters.items():
-        if feat not in df.columns:
-            continue
+
         if not isinstance(cond, dict):
             continue
 
@@ -501,7 +536,6 @@ def get_subgroup(filters: dict, limit: int = 500):
             if op is None or val is None:
                 continue
         else:
-            # pick first recognized operator key
             op = None
             val = None
             for k, v in cond.items():
@@ -524,15 +558,15 @@ def get_subgroup(filters: dict, limit: int = 500):
             df = df[df[feat] == val]
 
     indices = df.index.astype(int).tolist()
+
     return {
         "data": {
-            "size": int(len(df)),
+            "size": int(len(indices)),
             "indices": indices,
             "filters": filters,
         },
         "visualisation": None,
     }
-
 
 def predict_with_feature_changes(instance_id: int, changes: dict):
     """
@@ -574,7 +608,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
-# TODO: maybe show feature distribution?
+# TODO: maybe return feature distribution as visualisation?
 def dataset_meta():
     """
     Return high-level information about the dataset used by the model.
@@ -657,7 +691,7 @@ def model_meta():
 
 available_tools_mapping = {
     "generate_local_shap_bar_plot": generate_shap_bar_plot,
-    "generate_global_shap_summary_plot": generate_shap_summary_plot,
+    "generate_global_subgroup_shap_plot": generate_shap_summary_plot,
     "get_individual_prediction": get_individual_prediction,
     "get_average_prediction": get_average_prediction,
     "get_cp_plot": get_cp_plot,

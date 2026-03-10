@@ -8,8 +8,17 @@ class ShapBarPlot(BaseModel):
     instance_id: int = Field(description="Index of the instance to generate SHAP bar plot for (0-based).")
     # max_display: int = Field(default=10, description="Max number of features to show.")
 
-# class ShapSummaryPlot(BaseModel):
-    # max_display: int = Field(default=10, description="Max number of features to show in the global summary.")
+class ShapSummaryPlot(BaseModel):
+    source: str = Field(default="all",
+        description="Use 'all' to compute feature importance for the entire dataset, or 'indices' to compute importance for a subgroup."
+    )
+    indices: list[int] | None = Field(default=None,
+        description="Optional list of instance indices when source='indices'. Usually obtained from get_subgroup."
+    )
+    max_display: int = Field(
+        default=10,
+        description="Maximum number of features to show in the SHAP summary plot."
+    )
 
 class IndividualPrediction(BaseModel):
     instance_id: int = Field(description="Index of the instance to predict for (0-based).")
@@ -73,19 +82,20 @@ explainer_tools = [
     },
     {
         "type": "function",
-        "name": "generate_global_shap_summary_plot",
-        "description": "Provides GLOBAL feature importance across the entire dataset using SHAP values. "
-        "Use this when the user asks which features are most important overall in the model "
-        "or across all instances (e.g., 'Which features matter most?', 'What are the most "
-        "important features in the model?'). The plot aggregates SHAP values across the "
-        "dataset to show which features generally have the largest impact on predictions. "
-        "This explanation reflects overall model behaviour and should NOT be used for "
-        "questions about a specific instance, row, or prediction.", 
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
+        "name": "generate_global_subgroup_shap_plot",
+        "description": """
+            Provides importance of features on the model's predictions across the entire dataset or a subset using SHAP values. 
+
+            It can compute importance for the entire dataset (global importance), or a subgroup of instances (for example houses with certain characteristics).
+
+            Use this when the user asks questions such as:
+            - "Which features are most important in the model?"
+            - "What features matter most overall?"
+            - "For houses with more than 5 rooms, which features influence the price the most?"
+            
+            Do NOT used this tool for questions about a specific instance.", 
+        """,
+        "parameters": ShapSummaryPlot.model_json_schema(),
     },
     {
         "type": "function",
@@ -125,16 +135,37 @@ explainer_tools = [
         "type": "function",
         "name": "get_subgroup",
         "description": """
-            Filter test instances by feature conditions and return indices.
+            Filter test instances by feature conditions and return the indices of instances that satisfy the conditions.
+
+            Each filter specifies a feature name and a comparison condition. The feature name must match a dataset column
+            or the special field "predicted_price", which refers to the model's predicted value.
+
+            Supported comparison operators: >, >=, <, <=, ==
+
+            Filter format: {"filters": {"<feature_name>": {"op": "<operator>", "value": <number>}}}
+
+            Multiple filters can be combined; all conditions must be satisfied (logical AND).
+
             Examples:
-            - "houses with less than 1 bedroom"
+            User query: "houses with less than 1 bedroom"
             -> {"filters": {"AveBedrms": {"op": "<", "value": 1}}}
 
-            - "MedInc greater than 5"
+            User query: "houses where median income is greater than 5"
             -> {"filters": {"MedInc": {"op": ">", "value": 5}}}
 
-            - "AveRooms <= 3"
-            -> {"filters": {"AveRooms": {"op": "<=", "value": 3}}}
+            User query: "houses with predicted price above 1.3"
+            -> {"filters": {"predicted_price": {"op": ">", "value": 1.3}}}
+
+            User query: "houses with more than 5 rooms and price below 2"
+            -> {
+                "filters": {
+                    "AveRooms": {"op": ">", "value": 5},
+                    "predicted_price": {"op": "<", "value": 2}
+                }
+            }
+
+            If the user asks about a subgroup of houses or wants to compute statistics for houses satisfying certain conditions,
+            this tool should be used first to retrieve the matching instances.
             """,
         "parameters": Subgroup.model_json_schema(),
     },
