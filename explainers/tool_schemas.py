@@ -1,5 +1,5 @@
 # Define tool schemas
-from typing import Dict, Union
+from typing import Dict, Union, List
 from pydantic import BaseModel, Field
 
 # define the tool properties with pydantic
@@ -57,16 +57,12 @@ class SimilarInstances(BaseModel):
     )
 
 class RepresentativeInstances(BaseModel):
-    filters: Dict[str, Condition] = Field(
+    indices: List[int] = Field(
         description=(
-            "Feature filters defining a subgroup of instances. "
-            "Example: {'AveRooms': {'op': '>', 'value': 5}} to select houses with more than 5 rooms."
+            "List of dataset indices representing a subgroup of instances. These indices are usually obtained from the get_subgroup tool."
         )
     )
-    k: int = Field(
-        default=3,
-        description="Number of representative instances to return for the subgroup."
-    )
+    k: int = Field(default=3, description="Number of representative instances to return from the subgroup.")
 
 explainer_tools = [
     {
@@ -193,10 +189,11 @@ explainer_tools = [
         "type": "function",
         "name": "get_representative_instances",
         "description": (
-            "Find representative instances for a subgroup of the dataset defined by feature filters. "
-            "Use this when the user asks for typical or representative examples "
-            "of houses that satisfy certain conditions (e.g., 'houses with many rooms'). "
-            "The tool identifies instances closest to the group's centroid in feature space."
+            "Return representative examples from a subgroup of the dataset. "
+            "The subgroup must first be identified using the get_subgroup tool, "
+            "which returns a list of indices. These indices should then be passed "
+            "to this function. The function selects the k instances closest to the "
+            "subgroup centroid in feature space, representing typical examples of that group."
         ),
         "parameters": RepresentativeInstances.model_json_schema(),
     },

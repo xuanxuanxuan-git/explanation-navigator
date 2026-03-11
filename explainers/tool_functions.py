@@ -275,25 +275,24 @@ def get_average_prediction(source: str = "all", indices=None):
     """
     _init_if_needed()
     model = _STATE["model"]
-    scaler = _STATE["scaler"]
-    X_test = _STATE["X_test"]
+    X_scaled = _STATE["X_test_scaled"]
 
     source = (source or "test").strip().lower()
 
     if source == "all":
-        X = X_test
+        X = X_scaled 
     elif source == "indices":
         if not isinstance(indices, list) or len(indices) == 0:
             return {"data": "indices must be a non-empty list when source='indices'.", "visualisation": None}
         # validate and slice
-        idx = [int(i) for i in set(indices) if 0 <= int(i) < len(X_test)]
+        idx = [int(i) for i in set(indices) if 0 <= int(i) < len(X_scaled)]
         if not idx:
             return {"data": "No valid indices provided.", "visualisation": None}
-        X = X_test.iloc[idx]
+        X = X_scaled[idx]
     else:
         return {"data": f"Unknown source='{source}'. Use 'test' or 'indices'.", "visualisation": None}
 
-    preds = model.predict(scaler.transform(X)).astype(float)
+    preds = model.predict(X).astype(float)
     avg = float(np.mean(preds))
     return {
         "data": {
@@ -430,31 +429,16 @@ def get_similar_instances(instance_id: int, k: int = 3):
         "visualisation": None,
     }
 
-# TODO: get representative instances for certain prediction class
-# TODO: combine with get_subgroup
 # this is too slow to compute
-def get_representative_instances(filters: dict, k: int = 3):
+def get_representative_instances(indices: list, k: int = 3):
     """
     Return k representative instances for a filtered subgroup.
     """
     _init_if_needed()
-
-    filters = _maybe_json_loads(filters)
     k = int(k)
 
-    subgroup = get_subgroup(filters)
-
-    indices = subgroup["data"]["indices"]
-
     if len(indices) == 0:
-        return {
-            "data": {
-                "message": "No instances found for the specified filters.",
-                "filters": filters,
-                "indices": []
-            },
-            "visualisation": None
-        }
+        return {"data": "indices must be a non-empty list.", "visualisation": None}
 
     X_scaled = _STATE["X_test_scaled"]
     X_test = _STATE["X_test"]
@@ -462,40 +446,34 @@ def get_representative_instances(filters: dict, k: int = 3):
     # Ensure k is valid
     k = min(k, len(indices))
 
+    indices = [int(i) for i in indices if 0 <= int(i) < len(X_scaled)]
+    if not indices:
+        return {"data": "No valid indices provided.", "visualisation": None}
+
     subgroup_vectors = X_scaled[indices]
-
     centroid = np.mean(subgroup_vectors, axis=0)
+    distances = np.linalg.norm(subgroup_vectors - centroid, axis=1)
 
-    distances = []
+    top_positions = np.argsort(distances)[:k]
+    rep_indices = [indices[i] for i in top_positions]
 
-    for idx in indices:
-        vec = X_scaled[idx]
-        dist = _euclidean_distance(vec, centroid)
-        distances.append((idx, dist))
-
-    distances.sort(key=lambda x: x[1])
-
-    top = distances[:k]
+    # batch predictions
+    preds = model.predict(X_scaled[rep_indices])
 
     rows = []
-    rep_indices = []
-
-    for idx, dist in top:
-        rep_indices.append(int(idx))
+    for i, idx in enumerate(rep_indices):
         rows.append({
             "instance_id": int(idx),
             "instance_features": {
                 col: float(X_test.iloc[idx][col]) for col in X_test.columns
             },
-            "prediction": round(float(model.predict([X_scaled[idx]])[0]), 4),
-            # "target": float(y_test[idx])
+            "prediction": round(float(preds[i]), 4)
         })
 
     return {
         "data": {
-            "filters": filters,
             "group_size": len(indices),
-            "representative_indices": rep_indices,
+            "representative_indices": [int(i) for i in rep_indices],
             "instances": rows
         },
         "visualisation": None,
