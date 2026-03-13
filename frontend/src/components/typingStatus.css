@@ -13,8 +13,10 @@
   background-size: 200% 100%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  background-clip: text; /* non-webkit fallback */
+  color: currentColor;   /* fallback for browsers that don't support background-clip */
 
-  animation: typingShimmer 3s linear infinite;
+  animation: typingShimmer 3.5s linear infinite;
 }
 
 @keyframes typingShimmer{
