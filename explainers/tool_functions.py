@@ -252,18 +252,18 @@ def get_individual_prediction(instance_id: int):
     _check_instance_id(instance_id)
 
     model = _STATE["model"]
-    scaler = _STATE["scaler"]
     X_test = _STATE["X_test"]
+    X_scaled = _STATE["X_test_scaled"]
 
-    x = X_test.iloc[[instance_id]]
-    pred = float(model.predict(scaler.transform(x))[0])
+    x = X_scaled[[instance_id]]
+    pred = float(model.predict(x)[0])
 
     return {
         "data": {"instance_id": instance_id,
         "instance_features": {
             col: float(X_test.iloc[instance_id][col]) for col in X_test.columns
         },
-        "predicted_price": round(pred, 2)},
+        "predicted_price": round(pred, 4)},
         "visualisation": None,
     }
 
@@ -387,10 +387,8 @@ def get_similar_instances(instance_id: int, k: int = 3):
 
     X_test = _STATE["X_test"]
     X_scaled = _STATE["X_test_scaled"]
-    y_test = _STATE["y_test"]
 
     query_vec = X_scaled[instance_id]
-
     distances = []
 
     for i in range(len(X_scaled)):
@@ -402,7 +400,6 @@ def get_similar_instances(instance_id: int, k: int = 3):
         distances.append((i, dist))
 
     distances.sort(key=lambda x: x[1])
-
     top = distances[:k]
 
     rows = []
@@ -429,7 +426,7 @@ def get_similar_instances(instance_id: int, k: int = 3):
         "visualisation": None,
     }
 
-# this is too slow to compute
+
 def get_representative_instances(indices: list, k: int = 3):
     """
     Return k representative instances for a filtered subgroup.
@@ -484,7 +481,7 @@ def get_subgroup(filters: dict):
 
     X_test = _STATE["X_test"]
     model = _STATE["model"]
-    scaler = _STATE["scaler"]
+    X_scaled = _STATE["X_test_scaled"]
 
     # If filters accidentally comes as a JSON string, parse it
     filters = _maybe_json_loads(filters)
@@ -494,7 +491,7 @@ def get_subgroup(filters: dict):
     df = X_test.copy()
 
     # Add predicted price column so it can be filtered
-    preds = model.predict(scaler.transform(X_test))
+    preds = model.predict(X_scaled)
     df["predicted_price"] = preds
 
     valid_features = set(df.columns)
@@ -513,8 +510,10 @@ def get_subgroup(filters: dict):
             "visualisation": None,
         }
 
-    for feat, cond in filters.items():
+    # Use a boolean mask instead of repeatedly filtering dataframe
+    mask = np.ones(len(df), dtype=bool)
 
+    for feat, cond in filters.items():
         if not isinstance(cond, dict):
             continue
 
@@ -536,19 +535,19 @@ def get_subgroup(filters: dict):
                     break
             if op is None:
                 continue
-
+        col = df[feat]
         if op == ">":
-            df = df[df[feat] > val]
+            mask &= col > val
         elif op == ">=":
-            df = df[df[feat] >= val]
+            mask &= col >= val
         elif op == "<":
-            df = df[df[feat] < val]
+            mask &= col < val
         elif op == "<=":
-            df = df[df[feat] <= val]
+            mask &= col <= val
         elif op == "==":
-            df = df[df[feat] == val]
+            mask &= col == val
 
-    indices = df.index.astype(int).tolist()
+    indices = df.index[mask].astype(int).tolist()
 
     return {
         "data": {
