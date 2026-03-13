@@ -19,6 +19,7 @@ export default function ChatPage() {
   const [visualisations, setVisualisations] = useState([])
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
+  const [llmStage, setLlmStage] = useState("thinking")
   const messagesEndRef = useRef(null)
 
   // Auto-scroll to bottom when messages change
@@ -42,6 +43,7 @@ export default function ChatPage() {
 
     if (!useStreaming) {
       setBusy(true)
+      // setLlmStage("thinking")
       try {
         const res = await chatOnce({
           message: text,
@@ -60,6 +62,7 @@ export default function ChatPage() {
 
     // streaming
     setBusy(true)
+    setLlmStage("thinking")
     setMessages(prev => [...prev, { role: 'assistant', content: '' }])
     setVisualisations([])
 
@@ -119,7 +122,7 @@ export default function ChatPage() {
           overflow: 'auto',
           background: 'white'
         }}>
-          <MessageList messages={messages} busy={busy} />
+          <MessageList messages={messages} busy={busy} status={llmStage}/>
           <div ref={messagesEndRef} />
         </div>
 

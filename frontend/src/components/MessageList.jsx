@@ -1,7 +1,8 @@
 import React from 'react'
-import TypingBubble from './TypingBubble.jsx'
+import TypingStatus from './TypingStatus.jsx'
 
-export default function MessageList({ messages, busy }) {
+export default function MessageList({ messages, busy, status }) {
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {messages.map((m, idx) => (
@@ -19,9 +20,9 @@ export default function MessageList({ messages, busy }) {
           <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 4 }}>
             {m.role}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div>
             {m.role === 'assistant' && !m.content && busy ? (
-              <TypingBubble />
+              <TypingStatus status={status}/>
             ) : (
               m.content
             )}
@@ -31,4 +32,3 @@ export default function MessageList({ messages, busy }) {
     </div>
   )
 }
-

@@ -1,0 +1,27 @@
+.typing-status{
+  font-size:14px;
+  font-weight:500;
+  opacity:0.9;
+
+  background: linear-gradient(
+    90deg,
+    currentColor 25%,
+    rgba(255,255,255,0.2) 50%,
+    currentColor 75%
+  );
+
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+
+  animation: typingShimmer 3s linear infinite;
+}
+
+@keyframes typingShimmer{
+  0%{
+    background-position: 200% 0;
+  }
+  100%{
+    background-position: -200% 0;
+  }
+}
