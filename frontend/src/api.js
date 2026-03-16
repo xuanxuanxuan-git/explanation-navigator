@@ -104,3 +104,23 @@ export function chatWithToolsStream({ message, history = [], model, system, opti
     }
   }).catch((err) => onError?.({ message: err.message }))
 }
+
+export async function fetchInstance(instanceId) {
+  const res = await fetch(`http://localhost:5001/api/instance/${instanceId}`)
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}
+
+export async function predictInstanceWithChanges({ instance_id, changes }) {
+  const res = await fetch(`http://localhost:5001/api/instance/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instance_id, changes }),
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}

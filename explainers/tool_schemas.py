@@ -122,6 +122,7 @@ explainer_tools = [
         },
     },
     {
+# TODO: update the description of this function
         "type": "function",
         "name": "get_cp_plot",
         "description": "Generate a CP plot for one instance over one feature (vary feature across a grid; other features fixed).",
@@ -197,21 +198,40 @@ explainer_tools = [
         ),
         "parameters": RepresentativeInstances.model_json_schema(),
     },
+# TODO: fix it
     {
         "type": "function",
         "name": "dataset_meta",
         "description": (
-            "Provide general information about the dataset used by the AI model. "
-            "Use this when the user asks questions like "
-            "'What data was used to train the model?', "
-            "'How many houses are in the dataset?', or "
-            "'What features describe the houses?'. "
-            "The tool returns dataset size, feature names, and statistics of each feature such as average, min, max."
+            "Provide information about the dataset used by the AI model. "
+            "Use this when the user asks about the dataset size, feature names, target variable, "
+            "summary statistics, or the distribution of a specific feature. "
+            "If 'feature' is provided, return that feature's distribution statistics and a distribution chart. "
+            "If both 'feature' and 'instance_id' are provided, also show where that instance's feature value lies within the dataset distribution."
         ),
         "parameters": {
             "type": "object",
-            "properties": {},
-            "required": []
+            "properties": {
+                "feature": {
+                    "type": "string",
+                    "description": (
+                        "Optional feature name to inspect in detail. "
+                        "Example: 'AveBedrms', 'MedInc', 'HouseAge'. "
+                        "If provided, the tool returns the distribution of that feature."
+                    )
+                },
+                "instance_id": {
+                    "type": "integer",
+                    "description": (
+                        "Optional 0-based test instance index. "
+                        "Use together with 'feature' to highlight where that instance's feature value sits "
+                        "in the feature distribution."
+                    ),
+                    "minimum": 0
+                },
+            },
+            "required": [],
+            "additionalProperties": False
         },
     },
     {

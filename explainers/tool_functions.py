@@ -598,26 +598,22 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
-# TODO: maybe return feature distribution as visualisation?
-def dataset_meta():
+# TODO: very slow in computation
+def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
-    Return high-level information about the dataset used by the model.
+    Return high-level dataset info.
+    If feature is provided, also return that feature's distribution.
+    If instance_id is provided with feature, highlight where that instance sits in the distribution.
     """
     _init_if_needed()
 
     X_train = _STATE["X_train"]
-    # X_test = _STATE["X_test"]
+    X_test = _STATE["X_test"]
     y_train = _STATE["y_train"]
-    # y_test = _STATE["y_test"]
-
-    # X_all = pd.concat([X_train, X_test], axis=0)
-    # y_all = np.concatenate([y_train, y_test])
 
     feature_stats = {}
-
     for col in X_train.columns:
         s = X_train[col].astype(float)
-
         feature_stats[col] = {
             "mean": round(float(s.mean()), 3),
             "min": round(float(s.min()), 3),
@@ -625,25 +621,107 @@ def dataset_meta():
             "std": round(float(s.std()), 3),
         }
 
-    return {
-        "data": {
-            "dataset_name": "California Housing",
-            # "total_instances": int(len(X_all)),
-            "train_instances": int(len(X_train)),
-            # "test_instances": int(len(X_test)),
-            "num_features": int(len(X_train.columns)),
-            "features": X_train.columns.tolist(),
-            "target": "MedianHouseValue",
-            "target_statistics": {
-                "mean": round(float(np.mean(y_train)), 3),
-                "min": round(float(np.min(y_train)), 3),
-                "max": round(float(np.max(y_train)), 3),
-                "std": round(float(np.std(y_train)), 3),
-            },
-            "feature_statistics": feature_stats
+    data = {
+        "dataset_name": "California Housing",
+        "train_instances": int(len(X_train)),
+        "num_features": int(len(X_train.columns)),
+        "features": X_train.columns.tolist(),
+        "target": "MedianHouseValue",
+        "target_statistics": {
+            "mean": round(float(np.mean(y_train)), 3),
+            "min": round(float(np.min(y_train)), 3),
+            "max": round(float(np.max(y_train)), 3),
+            "std": round(float(np.std(y_train)), 3),
         },
-        "visualisation": None,
+        "feature_statistics": feature_stats,
     }
+
+    visualisation = None
+
+    if feature is not None:
+        if feature not in X_train.columns:
+            return {
+                "data": {
+                    **data,
+                    "error": f"Unknown feature '{feature}'. Available features: {X_train.columns.tolist()}"
+                },
+                "visualisation": None,
+            }
+
+        s = X_train[feature].astype(float)
+        feature_info = {
+            "feature": feature,
+            "distribution_statistics": {
+                "mean": round(float(s.mean()), 4),
+                "min": round(float(s.min()), 4),
+                "max": round(float(s.max()), 4),
+                "std": round(float(s.std()), 4),
+            }
+        }
+
+        instance_value = None
+        percentile = None
+
+        if instance_id is not None:
+            instance_id = int(instance_id)
+            _check_instance_id(instance_id)
+            instance_value = float(X_test.iloc[instance_id][feature])
+            percentile = float((s <= instance_value).mean() * 100)
+
+            feature_info["instance"] = {
+                "instance_id": instance_id,
+                "value": round(instance_value, 4),
+                "percentile_in_train_distribution": round(percentile, 2),
+            }
+
+        data["feature_distribution"] = feature_info
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Histogram(
+            x=s,
+            nbinsx=int(bins),
+            marker=dict(color="#93c5fd"),
+            opacity=0.85,
+            name="Train distribution",
+            hovertemplate=f"{feature}: %{{x:.4f}}<br>Count: %{{y}}<extra></extra>",
+        ))
+
+        if instance_value is not None:
+            fig.add_vline(
+                x=instance_value,
+                line_width=3,
+                line_dash="dash",
+                line_color="#ef4444",
+                annotation_text=f"Instance {instance_id}: {instance_value:.4f}",
+                annotation_position="top right",
+            )
+
+        fig.update_layout(
+            title=f"Distribution of {feature}",
+            xaxis_title=feature,
+            yaxis_title="Count",
+            bargap=0.05,
+            margin={"l": 40, "r": 20, "t": 60, "b": 40},
+            showlegend=False,
+        )
+
+        visualisation = _plotly_payload(
+            fig,
+            display_mode_bar=False,
+            meta={
+                "tool": "dataset_meta",
+                "feature": feature,
+                "instance_id": instance_id,
+                "kind": "distribution",
+            },
+        )
+
+    return {
+        "data": data,
+        "visualisation": visualisation,
+    }
+
 
 def model_meta():
     """

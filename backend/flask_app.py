@@ -682,6 +682,35 @@ def list_tools():
     """List available tools/functions"""
     return jsonify({"tools": get_tool_schemas(LLM_PROVIDER)})
 
+
+@app.get("/api/instance/<int:instance_id>")
+def get_instance(instance_id):
+    try:
+        result = available_tools_mapping["get_individual_prediction"](instance_id=instance_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.post("/api/instance/predict")
+def predict_instance_with_changes():
+    data = request.get_json(force=True) or {}
+    instance_id = data.get("instance_id")
+    changes = data.get("changes") or {}
+
+    if instance_id is None:
+        return jsonify({"error": "Missing instance_id"}), 400
+
+    try:
+        result = available_tools_mapping["predict_with_feature_changes"](
+            instance_id=int(instance_id),
+            changes=changes,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # =============================================================================
 # MAIN
 # =============================================================================

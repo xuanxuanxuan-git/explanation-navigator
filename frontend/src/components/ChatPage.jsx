@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react'
 import MessageList from './MessageList.jsx'
 import MessageInput from './MessageInput.jsx'
 import { chatOnce, chatWithToolsStream } from '../api.js'
-import VisualisationPanel from './VisualisationPanel.jsx'
+// import VisualisationPanel from './VisualisationPanel.jsx'
+import InstanceEditor from './InstanceEditor.jsx'
 
 const SUGGESTED_QUESTIONS = [
   "Why do I get this prediction?",
@@ -21,6 +22,10 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
   const messagesEndRef = useRef(null)
+  const [userInstanceId, setUserInstanceId] = useState(
+    // () => Math.floor(Math.random() * 200)
+    2
+  ) 
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -29,8 +34,8 @@ export default function ChatPage() {
 
   const system = useMemo(
     () =>
-      'You are a helpful assistant. Keep answers concise. Do not flatter. If a tool returned a missing argument, ask the user to provide it. Available features include MedInc (median income), AveBedrms (average number of bedrooms), AveRooms (average rooms), AveOccup (average number of occupants), HouseAge (house age), population, longitude and latitude.',
-    []
+      `You are a helpful assistant explaining a machine learning model. The user represents instance ${userInstanceId} in the dataset. When answering questions, assume the user is asking about their own house unless stated otherwise. Available features include: MedInc (median income), AveBedrms (average bedrooms), AveRooms (average rooms),AveOccup (average occupants), HouseAge (house age), Population, Longitude and Latitude. Keep answers concise and factual. If a tool returned a missing argument, ask the user to provide it.`,
+    [userInstanceId]
   )
 
   async function handleSend(text) {
@@ -72,6 +77,8 @@ export default function ChatPage() {
       system,
       options: { temperature: 1 },
       onToken: (token) => {
+        // model generating final response
+        // setLlmStage("rephrasing")
         setMessages(prev => {
           const copy = [...prev]
           const last = copy[copy.length - 1]
@@ -107,7 +114,8 @@ export default function ChatPage() {
     <div style={{ display: 'flex', gap: 12, height: '80vh', padding: 12 }}>
     {/* Left side: Visualisations */}
     <div style={{ flex: 0.4, border: '1px solid #ddd', borderRadius: 8, overflow: 'auto', background: '#fafafa' }}>
-      <VisualisationPanel visualisations={visualisations} />
+      {/* <VisualisationPanel visualisations={visualisations} /> */}
+      <InstanceEditor instanceId={userInstanceId} visualisations={visualisations} />
     </div>
 
       {/* Right side: Chat */}
