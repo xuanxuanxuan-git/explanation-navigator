@@ -1,6 +1,7 @@
 # Define tool schemas
 from typing import Dict, Union, List
 from pydantic import BaseModel, Field
+from typing import Optional
 
 # define the tool properties with pydantic
 class ShapBarPlot(BaseModel):
@@ -25,8 +26,7 @@ class IndividualPrediction(BaseModel):
 
 class CpPlot(BaseModel):
     instance_id: int = Field(description="Index of the instance (0-based).")
-    feature: str = Field(description="Feature name to vary for the CP curve.")
-    # grid_points: int = Field(default=30, description="Number of grid points to evaluate.")
+    feature: str = Field(description="Feature to vary (e.g. MedInc, AveRooms, HouseAge).")
 
 class Condition(BaseModel):
     op: str = Field(
@@ -62,7 +62,26 @@ class RepresentativeInstances(BaseModel):
             "List of dataset indices representing a subgroup of instances. These indices are usually obtained from the get_subgroup tool."
         )
     )
-    k: int = Field(default=3, description="Number of representative instances to return from the subgroup.")
+    k: Optional[int] = Field(default=3, description="Number of representative instances to return from the subgroup.")
+
+class DatasetMeta(BaseModel):
+    feature: Optional[str] = Field(
+        default=None,
+        description=(
+            "Feature name to analyse. Must match an existing feature exactly."
+        )
+    )
+    instance_id: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "0-based instance index. Use when referring to a specific instance or 'my value'."
+        )
+    )
+
+class CounterfactualExplanation(BaseModel):
+    instance_id: int = Field(description="Index of the instance to edit (0-based).")
+    target: float= Field(description="Desired prediction value.")
 
 explainer_tools = [
     {
@@ -122,10 +141,15 @@ explainer_tools = [
         },
     },
     {
-# TODO: update the description of this function
         "type": "function",
         "name": "get_cp_plot",
-        "description": "Generate a CP plot for one instance over one feature (vary feature across a grid; other features fixed).",
+        "description": "Generate a Ceteris Paribus (CP) plot for a single instance and one feature. A CP plot shows how the model prediction changes when ONE feature is varied, "
+        "while all other features are kept fixed at their original values. "
+        "Use this tool when the user asks:"
+        "- 'How does this feature affect my prediction?'"
+        "- 'What happens if I change MedInc?'"
+        "- 'What if this feature was higher or lower?'"
+        "Note: This is a local explanation for ONE instance, and only ONE feature is varied at a time. Feature must match a valid dataset feature name exactly.",
         "parameters": CpPlot.model_json_schema(),
     },
     {
@@ -198,41 +222,17 @@ explainer_tools = [
         ),
         "parameters": RepresentativeInstances.model_json_schema(),
     },
-# TODO: fix it
     {
         "type": "function",
         "name": "dataset_meta",
         "description": (
             "Provide information about the dataset used by the AI model. "
-            "Use this when the user asks about the dataset size, feature names, target variable, "
+            "Use this when the user asks about the dataset overview (size, features, target), "
             "summary statistics, or the distribution of a specific feature. "
             "If 'feature' is provided, return that feature's distribution statistics and a distribution chart. "
-            "If both 'feature' and 'instance_id' are provided, also show where that instance's feature value lies within the dataset distribution."
+            "If both 'feature' and 'instance_id' are provided, also show where that instance's feature value lies in the distribution."
         ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "feature": {
-                    "type": "string",
-                    "description": (
-                        "Optional feature name to inspect in detail. "
-                        "Example: 'AveBedrms', 'MedInc', 'HouseAge'. "
-                        "If provided, the tool returns the distribution of that feature."
-                    )
-                },
-                "instance_id": {
-                    "type": "integer",
-                    "description": (
-                        "Optional 0-based test instance index. "
-                        "Use together with 'feature' to highlight where that instance's feature value sits "
-                        "in the feature distribution."
-                    ),
-                    "minimum": 0
-                },
-            },
-            "required": [],
-            "additionalProperties": False
-        },
+        "parameters": DatasetMeta.model_json_schema(),
     },
     {
         "type": "function",
@@ -251,12 +251,16 @@ explainer_tools = [
     {
         "type": "function",
         "name": "get_counterfactual_explanation",
-        "description": "Retrieve counterfactual explanations.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
+        "description": (
+            "Generate a counterfactual explanation for a given instance. A counterfactual explanation provides a set of feature changes that must be applied TOGETHER "
+            "to achieve a different prediction outcome. "
+            "Note that the returned changes must be implemented simultaneously to reach the target prediction. Individual changes should NOT be interpreted in isolation. "
+            "If no target is provided, the prediction is increased by default. "
+            "Use this tool when the user asks: "
+            "- 'What should I change to improve my prediction?'"
+            "- 'How can I increase the value?'"
+            "- 'What would make this house more expensive?'"
+        ),
+        "parameters": CounterfactualExplanation.model_json_schema(),
     },
 ]
-

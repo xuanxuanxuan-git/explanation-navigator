@@ -369,9 +369,131 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
 
-def get_counterfactual_explanation():
-    # retrieve counterfactual explanations
-    return
+
+def get_counterfactual_explanation(instance_id: int, target: float = None, max_steps: int = 50):
+    """
+    Generate a counterfactual explanation for an instance.
+
+    Strategy:
+    - Greedy feature-wise search
+    - At each step, modify the best feature that moves prediction toward target
+    """
+
+    _init_if_needed()
+    instance_id = int(instance_id)
+    _check_instance_id(instance_id)
+
+    X_test = _STATE["X_test"]
+    X_train = _STATE["X_train"]
+    scaler = _STATE["scaler"]
+    model = _STATE["model"]
+
+    x0 = X_test.iloc[[instance_id]].copy()
+    x_cf = x0.copy()
+
+    original_pred = float(model.predict(scaler.transform(x0))[0])
+
+    # Default target: increase prediction by 20%
+    if target is None:
+        target = original_pred * 1.2
+
+    feature_names = X_test.columns.tolist()
+
+    # Precompute feature ranges
+    feature_ranges = {
+        f: (float(X_train[f].min()), float(X_train[f].max()))
+        for f in feature_names
+    }
+
+    current_pred = original_pred
+
+    # ---------- GREEDY SEARCH ----------
+    for _ in range(max_steps):
+
+        best_feature = None
+        best_value = None
+        best_pred = current_pred
+
+        for f in feature_names:
+            min_v, max_v = feature_ranges[f]
+
+            # try small steps in both directions
+            candidates = np.linspace(min_v, max_v, 20)
+
+            for v in candidates:
+                temp = x_cf.copy()
+                temp[f] = v
+
+                pred = float(model.predict(scaler.transform(temp))[0])
+
+                # move closer to target
+                if abs(pred - target) < abs(best_pred - target):
+                    best_pred = pred
+                    best_feature = f
+                    best_value = v
+
+        # no improvement → stop
+        if best_feature is None:
+            break
+
+        # apply best change
+        x_cf[best_feature] = best_value
+        current_pred = best_pred
+
+        # stop early if close enough
+        if abs(current_pred - target) < 1e-3:
+            break
+
+    # ---------- EXTRACT CHANGES ----------
+    changes = {}
+    for f in feature_names:
+        v0 = float(x0[f].iloc[0])
+        v1 = float(x_cf[f].iloc[0])
+
+        if abs(v0 - v1) > 1e-6:
+            changes[f] = {
+                "from": round(v0, 4),
+                "to": round(v1, 4),
+                "delta": round(v1 - v0, 4),
+            }
+
+    cf_pred = float(model.predict(scaler.transform(x_cf))[0])
+
+    # ---------- VISUALISATION ----------
+    fig = go.Figure()
+
+    if changes:
+        fig.add_trace(go.Bar(
+            x=list(changes.keys()),
+            y=[c["delta"] for c in changes.values()],
+            marker_color="#6366f1",
+        ))
+
+    fig.update_layout(
+        title=f"Counterfactual changes (instance {instance_id})",
+        xaxis_title="Feature",
+        yaxis_title="Change",
+        margin={"l": 40, "r": 20, "t": 50, "b": 40},
+    )
+
+    return {
+        "data": {
+            "instance_id": instance_id,
+            "original_prediction": round(original_pred, 4),
+            "counterfactual_prediction": round(cf_pred, 4),
+            "target": round(target, 4),
+            "num_features_changed": len(changes),
+            "changes": changes,
+        },
+        "visualisation": _plotly_payload(
+            fig,
+            display_mode_bar=False,
+            meta={
+                "tool": "get_counterfactual_explanation",
+                "instance_id": instance_id,
+            },
+        ),
+    }
 
 
 def get_similar_instances(instance_id: int, k: int = 3):
@@ -598,12 +720,11 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
-# TODO: very slow in computation
 def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
     Return high-level dataset info.
     If feature is provided, also return that feature's distribution.
-    If instance_id is provided with feature, highlight where that instance sits in the distribution.
+    If instance_id is provided, highlight its position.
     """
     _init_if_needed()
 
@@ -613,12 +734,12 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
 
     feature_stats = {}
     for col in X_train.columns:
-        s = X_train[col].astype(float)
+        s = X_train[col].values  
         feature_stats[col] = {
-            "mean": round(float(s.mean()), 3),
-            "min": round(float(s.min()), 3),
-            "max": round(float(s.max()), 3),
-            "std": round(float(s.std()), 3),
+            "mean": round(float(np.mean(s)), 3),
+            "min": round(float(np.min(s)), 3),
+            "max": round(float(np.max(s)), 3),
+            "std": round(float(np.std(s)), 3),
         }
 
     data = {
@@ -638,44 +759,27 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
 
     visualisation = None
 
+    # ---------- FEATURE DISTRIBUTION ----------
     if feature is not None:
         if feature not in X_train.columns:
             return {
                 "data": {
                     **data,
-                    "error": f"Unknown feature '{feature}'. Available features: {X_train.columns.tolist()}"
+                    "error": f"Unknown feature '{feature}'."
                 },
                 "visualisation": None,
             }
 
-        s = X_train[feature].astype(float)
-        feature_info = {
-            "feature": feature,
-            "distribution_statistics": {
-                "mean": round(float(s.mean()), 4),
-                "min": round(float(s.min()), 4),
-                "max": round(float(s.max()), 4),
-                "std": round(float(s.std()), 4),
-            }
-        }
+        s = X_train[feature].values
 
         instance_value = None
-        percentile = None
 
         if instance_id is not None:
             instance_id = int(instance_id)
             _check_instance_id(instance_id)
             instance_value = float(X_test.iloc[instance_id][feature])
-            percentile = float((s <= instance_value).mean() * 100)
 
-            feature_info["instance"] = {
-                "instance_id": instance_id,
-                "value": round(instance_value, 4),
-                "percentile_in_train_distribution": round(percentile, 2),
-            }
-
-        data["feature_distribution"] = feature_info
-
+        # ---------- PLOT ----------
         fig = go.Figure()
 
         fig.add_trace(go.Histogram(
@@ -683,7 +787,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
             nbinsx=int(bins),
             marker=dict(color="#93c5fd"),
             opacity=0.85,
-            name="Train distribution",
             hovertemplate=f"{feature}: %{{x:.4f}}<br>Count: %{{y}}<extra></extra>",
         ))
 
@@ -693,16 +796,16 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
                 line_width=3,
                 line_dash="dash",
                 line_color="#ef4444",
-                annotation_text=f"Instance {instance_id}: {instance_value:.4f}",
+                annotation_text=f"Your {instance_id}: {instance_value:.4f}",
                 annotation_position="top right",
             )
 
         fig.update_layout(
-            title=f"Distribution of {feature}",
+            title=f"{feature} distribution",
             xaxis_title=feature,
             yaxis_title="Count",
             bargap=0.05,
-            margin={"l": 40, "r": 20, "t": 60, "b": 40},
+            margin={"l": 40, "r": 20, "t": 50, "b": 40},
             showlegend=False,
         )
 
@@ -713,7 +816,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
                 "tool": "dataset_meta",
                 "feature": feature,
                 "instance_id": instance_id,
-                "kind": "distribution",
             },
         )
 
