@@ -2,13 +2,12 @@ import React, { useMemo, useState, useEffect, useRef } from 'react'
 import MessageList from './MessageList.jsx'
 import MessageInput from './MessageInput.jsx'
 import { chatOnce, chatWithToolsStream } from '../api.js'
-// import VisualisationPanel from './VisualisationPanel.jsx'
 import InstanceEditor from './InstanceEditor.jsx'
 
 const SUGGESTED_QUESTIONS = [
-  "Why do I get this prediction?",
-  "What is the most important feature for instance 2?",
-  "What is the average model prediction?",
+  "Why is my risk of default high?",
+  "What can I change to reduce my risk?",
+  "What is the average probability of default?",
 ]
 
 export default function ChatPage() {
@@ -24,7 +23,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null)
   const [userInstanceId, setUserInstanceId] = useState(
     // () => Math.floor(Math.random() * 200)
-    2
+    3
   ) 
 
   // Auto-scroll to bottom when messages change
@@ -34,7 +33,28 @@ export default function ChatPage() {
 
   const system = useMemo(
     () =>
-      `You are a helpful assistant explaining a machine learning model. The user represents instance ${userInstanceId} in the dataset. When answering questions, assume the user is asking about their own house unless stated otherwise. Available features include: MedInc (median income), AveBedrms (average bedrooms), AveRooms (average rooms),AveOccup (average occupants), HouseAge (house age), Population, Longitude and Latitude. Keep answers concise and factual. If a tool returned a missing argument, ask the user to provide it.`,
+      `You are a helpful assistant explaining a machine learning model for credit risk prediction. The user represents applicant ${userInstanceId} in the dataset. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model predicts probability of default (credit risk), where higher values indicate higher likelihood of default. 
+
+      Available features include 10 variables:
+      - ExternalRiskEstimate
+      - NetFractionRevolvingBurden (revolving balance divided by the credit limit)
+      - AverageMInFile (Average Months in File)
+      - MSinceOldestTradeOpen (Months Since Most Recent Trade Open)
+      - MSinceMostRecentDelq (Months Since Most Recent Delinquency)
+      - PercentTradesNeverDelq (Percent of Trades Never Delinquent)
+      - NetFractionInstallBurden (installment balance divided by the original loan amount)
+      - PercentTradesWBalance (Percent of Trades with Balance)
+      - PercentInstallTrades (Percent of Installment Trades)
+      - MSinceMostRecentInqexcl7days (Months Since Most Recent Inquiry excluding the last 7 days)
+
+      Guidelines:
+      - Keep answers concise, factual, and grounded in tool outputs
+      - Do NOT infer or assume missing values
+      - Do NOT hallucinate feature values or explanations
+      - If required inputs (e.g., instance_id, feature) are missing, ask the user to provide them
+      - Clearly distinguish between:
+        - local explanations (single applicant)
+        - global explanations (entire dataset or subgroup)`,
     [userInstanceId]
   )
 

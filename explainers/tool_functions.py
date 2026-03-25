@@ -7,8 +7,8 @@ import shap
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import roc_auc_score, accuracy_score
 
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -45,35 +45,77 @@ _OP_MAP = {
     "eq": "==",
 }
 
-def _init_if_needed(n_points=1000, test_size=0.2, random_state=42):
+def _init_if_needed(test_size=0.2, random_state=42):
     if _STATE["ready"]:
         return
 
     with _STATE_LOCK:
         if _STATE["ready"]:
             return
+        df = pd.read_csv("use_case_data/heloc_dataset.csv")  
+        # Convert special missing codes to NaN first
+        df = df.replace([-9, -8, -7], np.nan)
 
-        X, y = shap.datasets.california(n_points=n_points)
-        X = pd.DataFrame(X)
+        # Remove rows where non-target feature values are missing
+        feature_cols = [c for c in df.columns if c != "RiskPerformance"]
+        df = df.dropna(subset=feature_cols, how="any").reset_index(drop=True)
+
+        # Target: RiskPerformance (Good/Bad)
+        # predicting the risk of being a bad borrower
+        y = df["RiskPerformance"].map({"Good": 0, "Bad": 1}).values
+        X = df.drop(columns=["RiskPerformance"]).copy()
+
+        # Fill remaining missing values with column medians
+        # X = X.fillna(X.median())
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=random_state
+            X, y, test_size=test_size, random_state=random_state, stratify=y
         )
 
+        # scaler = StandardScaler()
+        # X_train_scaled = scaler.fit_transform(X_train)
+        # X_test_scaled = scaler.transform(X_test)
+
+        # base_model = RandomForestClassifier(
+        #     n_estimators=200,
+        #     random_state=random_state,
+        #     n_jobs=-1
+        # )
+        # base_model.fit(X_train_scaled, y_train)
+
+        # importances = base_model.feature_importances_
+        # feature_names = X.columns
+
+        # top_idx = np.argsort(importances)[::-1][:10]
+        # top_features = feature_names[top_idx]
+        # print(top_features) 
+        top_features = ['ExternalRiskEstimate', 'NetFractionRevolvingBurden', 'AverageMInFile', 'MSinceOldestTradeOpen', 'MSinceMostRecentDelq', 'PercentTradesNeverDelq', 'NetFractionInstallBurden', 'PercentTradesWBalance', 'PercentInstallTrades', 'MSinceMostRecentInqexcl7days']
+        
+        # Reduce dataset
+        X_train = X_train[top_features].copy()
+        X_test = X_test[top_features].copy()
+
+        # Re-scale
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
 
-        model = RandomForestRegressor(n_estimators=200, random_state=random_state, n_jobs=-1)
+        model = RandomForestClassifier(
+            n_estimators=300,
+            random_state=random_state,
+            n_jobs=-1
+        )
         model.fit(X_train_scaled, y_train)
 
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test_scaled)
 
-        # expected_value for regression is typically a scalar baseline
-        expected_value = explainer.expected_value
-        if isinstance(expected_value, (list, np.ndarray)):
-            expected_value = float(np.array(expected_value).reshape(-1)[0])
+        # For binary classification -> take class 1 (bad borrower)
+        shap_values = shap_values[:, :, 1]
+
+        # expected_value = explainer.expected_value
+        # if isinstance(expected_value, list):
+        #     expected_value = expected_value[1]
 
         _STATE.update({
             "X_train": X_train.reset_index(drop=True),
@@ -85,7 +127,7 @@ def _init_if_needed(n_points=1000, test_size=0.2, random_state=42):
             "X_test_scaled": np.array(X_test_scaled),
             "explainer": explainer,
             "shap_values": np.array(shap_values),
-            "expected_value": float(expected_value),
+            # "expected_value": float(expected_value),
             "ready": True,
         })
 
@@ -141,7 +183,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
 
     rows = _local_rows(instance_id)
     rows_sorted = sorted(rows, key=lambda r: abs(r["shap_value"]), reverse=True)[:max_display]
-    # round to 4 dp for returned data
+
     rows_sorted = [
         {"feature": r["feature"], "shap_value": round(float(r["shap_value"]), 4)}
         for r in rows_sorted
@@ -170,7 +212,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
 
     return {
         "data": rows_sorted,
-        "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_bar_plot", "instance_id": instance_id}),
+        "visualisation": _plotly_payload(fig, meta={"tool": "generate_shap_bar_plot", "instance_id": instance_id}),
     }
 
 def generate_shap_summary_plot(source: str = "all", indices=None, max_display: int = 10):
@@ -242,11 +284,11 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             "count": int(len(X)),
             "features": rows_sorted,
         },
-        "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_summary_plot", "kind": "bar"}),
+        "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_summary_plot"}),
     }
 
 
-def get_individual_prediction(instance_id: int):
+def get_instance_features_and_prediction(instance_id: int):
     _init_if_needed()
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
@@ -256,14 +298,13 @@ def get_individual_prediction(instance_id: int):
     X_scaled = _STATE["X_test_scaled"]
 
     x = X_scaled[[instance_id]]
-    pred = float(model.predict(x)[0])
+    # pred = float(model.predict(x)[0])
+    pred = float(model.predict_proba(x)[0][1])
 
     return {
         "data": {"instance_id": instance_id,
-        "instance_features": {
-            col: float(X_test.iloc[instance_id][col]) for col in X_test.columns
-        },
-        "predicted_price": round(pred, 4)},
+            "instance_features": X_test.iloc[instance_id].to_dict(),
+            "prediction": round(pred, 4)},
         "visualisation": None,
     }
 
@@ -292,18 +333,18 @@ def get_average_prediction(source: str = "all", indices=None):
     else:
         return {"data": f"Unknown source='{source}'. Use 'test' or 'indices'.", "visualisation": None}
 
-    preds = model.predict(X).astype(float)
+    preds = model.predict_proba(X)[:, 1]
     avg = float(np.mean(preds))
     return {
         "data": {
             "source": source,
             "count": int(len(X)),
-            "average_prediction": round(avg, 4),
+            "average_probability_of_default": round(avg, 4),
         },
         "visualisation": None,
     }
 
-
+# Change in probability of predicting as bad borrower
 def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     _init_if_needed()
     instance_id = int(instance_id)
@@ -329,8 +370,8 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     for v in grid:
         xv = x0.copy()
         xv[feature] = v
-        preds.append(float(model.predict(scaler.transform(xv))[0]))
-
+        preds.append(float(model.predict_proba(scaler.transform(xv))[0][1]))
+    base_pred = float(model.predict_proba(scaler.transform(x0))[0][1])
     fig = go.Figure(
         data=[
             go.Scatter(
@@ -343,7 +384,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             ),
             go.Scatter(
                 x=[base_val],
-                y=[float(model.predict(scaler.transform(x0))[0])],
+                y=[base_pred],
                 mode="markers",
                 marker={"size": 10, "color": "#ef4444"},
                 hovertemplate=f"Current {feature}: %{{x:.4f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
@@ -353,7 +394,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
         layout=go.Layout(
             title=f"CP plot -- instance {instance_id}, feature: {feature}",
             xaxis={"title": feature},
-            yaxis={"title": "Model prediction"},
+            yaxis={"title": "Probability of default"},
             margin={"l": 60, "r": 20, "t": 55, "b": 40},
         ),
     )
@@ -369,6 +410,90 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
 
+
+def get_partial_dependence_plot(feature: str, grid_points: int = 100):
+    """
+    Generate Partial Dependence Plot (PDP) for a feature.
+
+    PDP shows the average model prediction as the feature varies,
+    marginalising over all other features.
+    """
+    _init_if_needed()
+
+    feature = (feature or "").strip()
+    grid_points = int(grid_points)
+
+    X_test = _STATE["X_test"]
+    X_scaled = _STATE["X_test_scaled"]
+    model = _STATE["model"]
+    scaler = _STATE["scaler"]
+
+    if feature not in X_test.columns:
+        return {"data": f"Unknown feature '{feature}'.", "visualisation": None}
+
+    feature_idx = X_test.columns.get_loc(feature)
+
+    col = X_test[feature].astype(float)
+    grid = np.linspace(col.min(), col.max(), grid_points)
+
+    # --------- SCALE GRID CORRECTLY ----------
+    col_mean = scaler.mean_[feature_idx]
+    col_scale = scaler.scale_[feature_idx]
+    grid_scaled = (grid - col_mean) / col_scale
+
+    # --------- VECTORIZED PDP ----------
+    n = X_scaled.shape[0]
+
+    # Repeat dataset for each grid value
+    X_rep = np.repeat(X_scaled, grid_points, axis=0)
+
+    # Tile grid values
+    grid_tiled = np.tile(grid_scaled, n)
+
+    # Replace feature column
+    X_rep[:, feature_idx] = grid_tiled
+
+    preds = model.predict_proba(X_rep)[:, 1]
+    preds = preds.reshape(n, grid_points)
+    pdp_values = preds.mean(axis=0)
+
+    # ---------- PLOT ----------
+    fig = go.Figure()
+
+    # PDP line
+    fig.add_trace(
+        go.Scatter(
+            x=grid,
+            y=pdp_values,
+            mode="lines",
+            line={"color": "#2563eb"},
+            name="PDP",
+            hovertemplate=f"{feature}: %{{x:.2f}}<br>Avg Prediction: %{{y:.4f}}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=f"Partial Dependence Plot — {feature}",
+        xaxis={"title": feature},
+        yaxis={"title": "Average prediction"},
+        margin={"l": 60, "r": 60, "t": 55, "b": 40},
+    )
+
+    return {
+        "data": {
+            "feature": feature,
+            "grid": [round(v, 4) for v in grid.tolist()],
+            "average_prediction": [round(p, 4) for p in pdp_values.tolist()],
+        },
+        "visualisation": _plotly_payload(
+            fig,
+            display_mode_bar=False,
+            meta={
+                "tool": "get_partial_dependence_plot",
+                "feature": feature,
+            },
+        ),
+    }
 
 def get_counterfactual_explanation(instance_id: int, target: float = None, max_steps: int = 50):
     """
@@ -391,11 +516,12 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     x0 = X_test.iloc[[instance_id]].copy()
     x_cf = x0.copy()
 
-    original_pred = float(model.predict(scaler.transform(x0))[0])
+    original_pred = float(model.predict_proba(scaler.transform(x0))[0][1])
 
-    # Default target: increase prediction by 20%
+    # Default target: decrease the probability by 20%
+    # TODO: fix
     if target is None:
-        target = original_pred * 1.2
+        target = original_pred * 0.8
 
     feature_names = X_test.columns.tolist()
 
@@ -424,7 +550,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 temp = x_cf.copy()
                 temp[f] = v
 
-                pred = float(model.predict(scaler.transform(temp))[0])
+                pred = float(model.predict_proba(scaler.transform(temp))[0][1])
 
                 # move closer to target
                 if abs(pred - target) < abs(best_pred - target):
@@ -432,7 +558,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                     best_feature = f
                     best_value = v
 
-        # no improvement → stop
+        # no improvement -> stop
         if best_feature is None:
             break
 
@@ -457,7 +583,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 "delta": round(v1 - v0, 4),
             }
 
-    cf_pred = float(model.predict(scaler.transform(x_cf))[0])
+    cf_pred = float(model.predict_proba(scaler.transform(x_cf))[0][1])
 
     # ---------- VISUALISATION ----------
     fig = go.Figure()
@@ -498,7 +624,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
 
 def get_similar_instances(instance_id: int, k: int = 3):
     """
-    Get other instances that are predicted with similar prices
+    Get other instances that are predicted with similar risk 
     """
     _init_if_needed()
 
@@ -518,7 +644,6 @@ def get_similar_instances(instance_id: int, k: int = 3):
             continue
 
         dist = _euclidean_distance(query_vec, X_scaled[i])
-
         distances.append((i, dist))
 
     distances.sort(key=lambda x: x[1])
@@ -534,7 +659,7 @@ def get_similar_instances(instance_id: int, k: int = 3):
             "instance_features": {
                 col: float(X_test.iloc[idx][col]) for col in X_test.columns
             },
-            "prediction": round(float(_STATE["model"].predict([X_scaled[idx]])[0]), 2),
+            "prediction": round(float(_STATE["model"].predict_proba([X_scaled[idx]])[0][1]), 4),
             # "target": float(y_test[idx])
         })
 
@@ -577,7 +702,7 @@ def get_representative_instances(indices: list, k: int = 3):
     rep_indices = [indices[i] for i in top_positions]
 
     # batch predictions
-    preds = model.predict(X_scaled[rep_indices])
+    preds = model.predict_proba(X_scaled[rep_indices])[:, 1]
 
     rows = []
     for i, idx in enumerate(rep_indices):
@@ -612,9 +737,9 @@ def get_subgroup(filters: dict):
 
     df = X_test.copy()
 
-    # Add predicted price column so it can be filtered
-    preds = model.predict(X_scaled)
-    df["predicted_price"] = preds
+    # Add predicted risk column so it can be filtered
+    preds = model.predict_proba(X_scaled)[:, 1]
+    df["prediction"] = preds
 
     valid_features = set(df.columns)
     invalid_filters = []
@@ -681,10 +806,6 @@ def get_subgroup(filters: dict):
     }
 
 def predict_with_feature_changes(instance_id: int, changes: dict):
-    """
-    changes example:
-      {"MedInc": 4.2, "AveRooms": 6.0}
-    """
     _init_if_needed()
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
@@ -697,7 +818,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
     X_test = _STATE["X_test"]
 
     x0 = X_test.iloc[[instance_id]].copy()
-    pred0 = float(model.predict(scaler.transform(x0))[0])
+    pred0 = float(model.predict_proba(scaler.transform(x0))[0][1])
 
     x1 = x0.copy()
     for feat, val in changes.items():
@@ -705,7 +826,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
             return {"data": f"Unknown feature '{feat}'.", "visualisation": None}
         x1[feat] = float(val)
 
-    pred1 = float(model.predict(scaler.transform(x1))[0])
+    pred1 = float(model.predict_proba(scaler.transform(x1))[0][1])
 
     return {
         "data": {
@@ -720,6 +841,8 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
+
+# TODO: show the risk prediction distribution
 def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
     Return high-level dataset info.
@@ -743,11 +866,11 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         }
 
     data = {
-        "dataset_name": "California Housing",
+        "dataset_name": "credit risk",
         "train_instances": int(len(X_train)),
         "num_features": int(len(X_train.columns)),
         "features": X_train.columns.tolist(),
-        "target": "MedianHouseValue",
+        "target": "Probability of default",
         "target_statistics": {
             "mean": round(float(np.mean(y_train)), 3),
             "min": round(float(np.min(y_train)), 3),
@@ -771,7 +894,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
             }
 
         s = X_train[feature].values
-
+        mean_val = float(np.mean(s))
         instance_value = None
 
         if instance_id is not None:
@@ -787,8 +910,25 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
             nbinsx=int(bins),
             marker=dict(color="#93c5fd"),
             opacity=0.85,
-            hovertemplate=f"{feature}: %{{x:.4f}}<br>Count: %{{y}}<extra></extra>",
+            hovertemplate=f"{feature}: %{{x:.2f}}<br>Count: %{{y}}<extra></extra>",
         ))
+
+        # Mean line
+        fig.add_vline(
+            x=mean_val,
+            line_width=2,
+            line_dash="dot",
+            line_color="#1d4ed8",
+        )
+
+        fig.add_annotation(
+            x=mean_val,
+            y=0.8,
+            xref="x",
+            yref="paper",
+            text=f"Mean: {mean_val:.2f}",
+            showarrow=False,
+        )
 
         if instance_value is not None:
             fig.add_vline(
@@ -796,7 +936,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
                 line_width=3,
                 line_dash="dash",
                 line_color="#ef4444",
-                annotation_text=f"Your {instance_id}: {instance_value:.4f}",
+                annotation_text=f"Your {feature}: {instance_value:.2f}",
                 annotation_position="top right",
             )
 
@@ -839,20 +979,16 @@ def model_meta():
 
     X_scaled = scaler.transform(X_test)
 
-    preds = model.predict(X_scaled)
+    preds = model.predict_proba(X_scaled)[:, 1]
 
-    rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
-    mae = float(mean_absolute_error(y_test, preds))
-    r2 = float(r2_score(y_test, preds))
+    accuracy = accuracy_score(y_test, preds > 0.5)
 
     return {
         # "data": {
-            "model_type": "Random Forest Regressor",
-            "prediction_task": "Predicting median house price in California districts",
+            "model_type": "Random Forest Classifier",
+            "prediction_task": "Predicting default risk of borrowers",
             "evaluation_metrics": {
-                "RMSE": round(rmse, 3),
-                "MAE": round(mae, 3),
-                "R2_score": round(r2, 3)
+                "accuracy": round(accuracy, 4)
             # },
         },
         "visualisation": None,
@@ -862,15 +998,15 @@ def model_meta():
 available_tools_mapping = {
     "generate_local_shap_bar_plot": generate_shap_bar_plot,
     "generate_global_subgroup_shap_plot": generate_shap_summary_plot,
-    "get_individual_prediction": get_individual_prediction,
+    "get_instance_features_and_prediction": get_instance_features_and_prediction,
     "get_average_prediction": get_average_prediction,
     "get_cp_plot": get_cp_plot,
     "get_counterfactual_explanation": get_counterfactual_explanation,
     "get_subgroup": get_subgroup,
     "predict_with_feature_changes": predict_with_feature_changes,
-    "get_similar_instances": get_similar_instances,
+    "get_similar_instances": get_similar_iFnstances,
     "get_representative_instances": get_representative_instances,
     "dataset_meta": dataset_meta,
     "model_meta": model_meta,
+    "get_partial_dependence_plot": get_partial_dependence_plot,
 }
-        

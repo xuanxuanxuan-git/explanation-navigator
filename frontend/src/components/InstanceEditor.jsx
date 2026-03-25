@@ -46,7 +46,7 @@ export default function InstanceEditor({ instanceId, visualisations = [] }) {
       const res = await fetchInstance(id)
       const data = res?.data || {}
       const f = data.instance_features || {}
-      const p = data.predicted_price
+      const p = data.prediction
 
       setFeatures(f)
       setOriginalFeatures(f)
@@ -121,7 +121,7 @@ export default function InstanceEditor({ instanceId, visualisations = [] }) {
         borderRadius: 8,
         border: "1px solid #e5e7eb"
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Instance</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Applicant ID</span>
 
         <input
           type="number"

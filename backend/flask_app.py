@@ -614,7 +614,7 @@ def chat_with_tools_stream():
             for chunk, done in llm_client.stream(
                 messages=messages_with_tools,
                 model=payload_model,
-                options=data.get("options") or {"temperature": 1},
+                options=data.get("options") or {"temperature": 0.2},
             ):
                 assistant_text += chunk
                 yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
@@ -686,7 +686,7 @@ def list_tools():
 @app.get("/api/instance/<int:instance_id>")
 def get_instance(instance_id):
     try:
-        result = available_tools_mapping["get_individual_prediction"](instance_id=instance_id)
+        result = available_tools_mapping["get_instance_features_and_prediction"](instance_id=instance_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
