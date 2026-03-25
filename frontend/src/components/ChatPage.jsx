@@ -52,9 +52,7 @@ export default function ChatPage() {
       - Do NOT infer or assume missing values
       - Do NOT hallucinate feature values or explanations
       - If required inputs (e.g., instance_id, feature) are missing, ask the user to provide them
-      - Clearly distinguish between:
-        - local explanations (single applicant)
-        - global explanations (entire dataset or subgroup)`,
+      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)`,
     [userInstanceId]
   )
 
