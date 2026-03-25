@@ -831,8 +831,8 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
     return {
         "data": {
             "instance_id": instance_id,
-            "original_prediction": pred0,
-            "new_prediction": pred1,
+            "original_prediction": round(pred0, 4),
+            "new_prediction": round(pred1, 4),
             "change_in_prediction": float(pred1 - pred0),
             "changes": {k: float(v) for k, v in changes.items()},
             "original_values": {k: float(x0[k].iloc[0]) for k in changes.keys()},
@@ -1004,7 +1004,7 @@ available_tools_mapping = {
     "get_counterfactual_explanation": get_counterfactual_explanation,
     "get_subgroup": get_subgroup,
     "predict_with_feature_changes": predict_with_feature_changes,
-    "get_similar_instances": get_similar_iFnstances,
+    "get_similar_instances": get_similar_instances,
     "get_representative_instances": get_representative_instances,
     "dataset_meta": dataset_meta,
     "model_meta": model_meta,
