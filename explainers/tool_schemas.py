@@ -41,8 +41,12 @@ class Condition(BaseModel):
     value: float = Field(description="Numeric value to compare against.")
 
 class Subgroup(BaseModel):
-    filters: Dict[str, Condition] = Field(
-        description="Map of feature name to filtering condition. Used to filter applicants."
+    filters: Dict[str, Union[Condition, List[Condition]]] = Field(
+        description=(
+            "Map of feature name to filtering condition(s). "
+            "Each feature can have a single condition or a list of conditions. "
+            "If multiple conditions are provided, all must be satisfied (logical AND)."
+        )
     )
 
 class PredictWithFeatureChanges(BaseModel):
@@ -55,7 +59,9 @@ class PredictWithFeatureChanges(BaseModel):
 
 class CounterfactualExplanation(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
-    target: float= Field(description="DDesired probability of default (e.g. 0.2 for lower risk).")
+    target: Optional[float] = Field(
+        description="Desired probability of default."
+    )
 
 class SimilarInstances(BaseModel):
     instance_id: int = Field(
@@ -162,26 +168,41 @@ explainer_tools = [
 
             Supported comparison operators: >, >=, <, <=, ==
 
-            Filter format: {"filters": {"<feature_name>": {"op": "<operator>", "value": <number>}}}
-
-            Multiple filters can be combined; all conditions must be satisfied (logical AND).
+            Filter format:
+            {
+                "filters": {
+                    "<feature_name>": {"op": "<operator>", "value": <number>}
+                }
+            }
+            OR for multiple conditions on the same feature:
+            {
+                "filters": {
+                    "<feature_name>": [
+                        {"op": ">=", "value": 67},
+                        {"op": "<=", "value": 71}
+                    ]
+                }
+            }
+            Multiple filters across features are combined with logical AND.
 
             Examples:
-            User query: "applicants with recent delinquencies"
+            "applicants with recent delinquencies"
             -> {"filters": {"MSinceMostRecentDelq": {"op": "<", "value": 12}}}
 
-            User query: "applicants with long credit history"
-            -> {"filters": {"AverageMInFile": {"op": ">", "value": 120}}}
+            "applicants with credit score between 67 and 71"
+            -> {"filters": {"ExternalRiskEstimate": [
+                    {"op": ">=", "value": 67},
+                    {"op": "<=", "value": 71}
+            ]}}
 
-            User query: "applicants with good credit score but still high risk"
-            -> {
-                "filters": {
+            "good credit but high predicted risk"
+            -> {"filters": {
                     "ExternalRiskEstimate": {"op": ">", "value": 70},
                     "prediction": {"op": ">", "value": 0.6}
                 }
             }
 
-            If the user asks about a subgroup of applicants or wants to compute statistics for applicants  satisfying certain conditions, this tool should be used first to retrieve the matching applicants.
+            If the user asks about a subgroup of applicants or wants to compute statistics for applicants satisfying certain conditions, this tool should be used first to retrieve the matching applicants.
             """,
         "parameters": Subgroup.model_json_schema(),
     },
@@ -249,11 +270,11 @@ explainer_tools = [
             "Generate a counterfactual explanation for a given applicant. A counterfactual explanation provides a set of feature changes that must be applied TOGETHER to move the predicted probability "
             "of default toward a target value. "
             "Note that the returned changes must be implemented simultaneously to reach the target prediction. Individual changes should NOT be interpreted in isolation. "
-            "If no target is provided, the prediction is decreased by default. "
+            "Only include `target` if the user explicitly specifies a desired probability."
             "Use this tool when the user asks: "
-            "- 'What should I change to reduce my risk?'"
-            "- 'How can I reduce the predicted probability?'"
-            "- 'What would make my risk higher?'"
+            "- 'What should I change to reduce my risk?' -> {'instance_id': }"
+            "- 'How can I reduce the predicted probability to 0.5?' -> {'instance_id': , 'target': 0.5}"
+            "- 'What would make my risk lower?'"
         ),
         "parameters": CounterfactualExplanation.model_json_schema(),
     },

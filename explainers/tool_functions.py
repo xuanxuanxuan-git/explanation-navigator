@@ -32,19 +32,6 @@ _STATE = {
     "expected_value": None,       # float
 }
 
-_OP_MAP = {
-    ">": ">",
-    ">=": ">=",
-    "<": "<",
-    "<=": "<=",
-    "==": "==",
-    "gt": ">",
-    "ge": ">=",
-    "lt": "<",
-    "le": "<=",
-    "eq": "==",
-}
-
 def _init_if_needed(test_size=0.2, random_state=42):
     if _STATE["ready"]:
         return
@@ -345,7 +332,7 @@ def get_average_prediction(source: str = "all", indices=None):
     }
 
 # Change in probability of predicting as bad borrower
-def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
+def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     _init_if_needed()
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
@@ -411,7 +398,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     }
 
 
-def get_partial_dependence_plot(feature: str, grid_points: int = 100):
+def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     """
     Generate Partial Dependence Plot (PDP) for a feature.
 
@@ -521,7 +508,9 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     # Default target: decrease the probability by 20%
     # TODO: fix
     if target is None:
-        target = original_pred * 0.8
+        return {
+            "error": "Target probability is required. Please specify a desired probability."
+        }
 
     feature_names = X_test.columns.tolist()
 
@@ -760,39 +749,42 @@ def get_subgroup(filters: dict):
     # Use a boolean mask instead of repeatedly filtering dataframe
     mask = np.ones(len(df), dtype=bool)
 
-    for feat, cond in filters.items():
-        if not isinstance(cond, dict):
-            continue
+    for feat, conds in filters.items():
+        col = df[feat]
 
-        # Support two styles:
-        #  A) {"op": ">", "value": 1}
-        #  B) {"gt": 1} or {"le": 3}
-        if "op" in cond:
-            op = _OP_MAP.get(cond.get("op"))
+        # Normalise to list
+        if not isinstance(conds, list):
+            conds = [conds]
+
+        for cond in conds:
+            if not isinstance(cond, dict):
+                continue
+
+            op = cond.get("op")
             val = cond.get("value")
+
             if op is None or val is None:
                 continue
-        else:
-            op = None
-            val = None
-            for k, v in cond.items():
-                if k in _OP_MAP:
-                    op = _OP_MAP[k]
-                    val = v
-                    break
-            if op is None:
-                continue
-        col = df[feat]
-        if op == ">":
-            mask &= col > val
-        elif op == ">=":
-            mask &= col >= val
-        elif op == "<":
-            mask &= col < val
-        elif op == "<=":
-            mask &= col <= val
-        elif op == "==":
-            mask &= col == val
+
+            # Normalize operator aliases
+            op = {
+                "gt": ">",
+                "ge": ">=",
+                "lt": "<",
+                "le": "<=",
+                "eq": "=="
+            }.get(op, op)
+
+            if op == ">":
+                mask &= col > val
+            elif op == ">=":
+                mask &= col >= val
+            elif op == "<":
+                mask &= col < val
+            elif op == "<=":
+                mask &= col <= val
+            elif op == "==":
+                mask &= col == val
 
     indices = df.index[mask].astype(int).tolist()
 
@@ -843,6 +835,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
 
 
 # TODO: show the risk prediction distribution
+# TODO: only show the feature distribution queried by the users
 def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
     Return high-level dataset info.

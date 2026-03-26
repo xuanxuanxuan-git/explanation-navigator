@@ -135,6 +135,34 @@ def _normalise_messages(messages):
 
     return out
 
+def _shorten_messages(messages, num_tools):
+    if not messages:
+        return messages
+    if messages[-1].get("role")=="assistant":
+        messages.pop()
+    
+    recent_messages = messages[-num_tools:]
+
+    for msg in recent_messages:
+        if msg.get("role") != "tool":
+            continue
+
+        content = msg.get("content")
+
+        try:
+            payload = json.loads(content.replace("'", '"'))
+        except Exception:
+            continue
+
+        if isinstance(payload, dict):
+            payload.pop("grid", None)
+            payload.pop("prediction", None)
+            payload.pop("average_prediction", None)
+
+            msg["content"] = json.dumps(payload)
+
+    return messages
+
 def get_tool_schemas(provider: Optional[str] = None):
     """
     Return tool schemas normalised for the target provider.
@@ -196,7 +224,7 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
         if field not in arguments or arguments[field] is None:
             field_description = properties.get(field, {}).get("description", "")
             missing_fields.append({"name": field, "description": field_description})
-            app.logger.info(field_description)
+            # app.logger.info(field_description)
     # TODO: also check if the parameter type is correct
     is_valid = len(missing_fields) == 0
 
@@ -409,6 +437,10 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                 "content": assistant_msg.get("content", ""), #[]
             })
             break
+        else:
+            # in case more iterations might be needed in the last iteration, run it one more time
+            if iteration == max_iterations:
+                max_iterations += 1
         
         # Append assistant tool-call message 
         assistant_tool_msg = {
@@ -447,7 +479,22 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                     else f"ERROR: {tool_result}"    # Add a message asking user for input
                 ),
             }
-            tool_reply.append(tool_msg)
+
+            if tool_name == "get_subgroup":
+                shorten_tool_msg = tool_msg.copy()
+                content = shorten_tool_msg.get("content")
+                try:
+                    payload = json.loads(content.replace("'", '"'))
+
+                    if isinstance(payload, dict):
+                        payload.pop("indices", None)
+                        shorten_tool_msg["content"] = json.dumps(payload) 
+                except Exception:
+                    pass
+
+                tool_reply.append(shorten_tool_msg)
+            else:
+                tool_reply.append(tool_msg)
             local_messages.append(tool_msg)
             
             if not success:
@@ -592,20 +639,11 @@ def chat_with_tools_stream():
         )
         app.logger.info(f"Tool calling model: {model}")
         app.logger.info(f"Reply from the tool call: {reply_with_tools}")
+        num_tools = len(reply_with_tools)-1
         messages.extend(reply_with_tools)
         
         messages_with_tools = _normalise_messages(messages)
         app.logger.info(f"Messages passed to streaming llm: {messages_with_tools}")
-
-        # payload = {
-        #     "model": model,
-        #     "messages": messages_with_tools,
-        #     "render_tools": True,  
-        #     "stream": True,  # streaming endpoint behaviour
-        #     "options": data.get("options") or {
-        #         "temperature": 0.2
-        #     }
-        # }
 
         payload_model = data.get("final_model") or data.get("model")
 
@@ -620,7 +658,9 @@ def chat_with_tools_stream():
                 yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
 
                 if done:
+                    _shorten_messages(messages_with_tools, num_tools)
                     messages_with_tools.append({"role": "assistant", "content": assistant_text})
+                    app.logger.info(f"Complete message saved: {messages_with_tools}")
                     yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
                     yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
                     return
