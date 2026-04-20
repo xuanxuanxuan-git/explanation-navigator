@@ -577,18 +577,124 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     # ---------- VISUALISATION ----------
     fig = go.Figure()
 
-    if changes:
-        fig.add_trace(go.Bar(
-            x=list(changes.keys()),
-            y=[c["delta"] for c in changes.values()],
-            marker_color="#6366f1",
+    features = feature_names  # show ALL features
+
+    # --- Robust feature ranges (NOT skewed by outliers) ---
+    feature_ranges = {
+        f: (
+            float(X_train[f].quantile(0.01)),
+            float(X_train[f].quantile(0.99))
+        )
+        for f in features
+    }
+
+    def scale(v, f):
+        min_v, max_v = feature_ranges[f]
+        if max_v - min_v < 1e-9:
+            return 0.5  # constant feature safeguard
+        # clip to avoid going outside range
+        v = max(min(v, max_v), min_v)
+        return (v - min_v) / (max_v - min_v)
+
+    for i, f in enumerate(features):
+        v0_raw = float(x0[f].iloc[0])
+        v1_raw = float(x_cf[f].iloc[0])
+
+        v0 = scale(v0_raw, f)
+        v1 = scale(v1_raw, f)
+
+        changed = abs(v0_raw - v1_raw) > 1e-6
+
+        # --- vertical band (range) ---
+        fig.add_trace(go.Scatter(
+            x=[f, f],
+            y=[v0, v1],
+            mode="lines",
+            line=dict(
+                color="rgba(99,102,241,0.4)" if changed else "rgba(180,180,180,0.3)",
+                width=10 if changed else 6,
+            ),
+            hoverinfo="skip",
+            showlegend=False
+        ))
+
+        # --- arrow showing direction ---
+        if changed:
+            fig.add_annotation(
+                x=f,
+                y=v1,
+                ax=f,
+                ay=v0,
+                xref="x",
+                yref="y",
+                axref="x",
+                ayref="y",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.2,
+                arrowwidth=2,
+                arrowcolor="rgba(99,102,241,0.9)",
+                opacity=0.9
+            )
+
+            # --- counterfactual point ---
+            fig.add_trace(go.Scatter(
+                x=[f],
+                y=[v1],
+                mode="text",
+                text=[f"{v1_raw:.0f}"],
+                textposition="top center" if v1>=v0 else "bottom center",
+                textfont=dict(
+                    size=10,
+                    color="black"
+                ),
+                hovertemplate=(
+                    f"<b>{f}</b><br>"
+                    f"Counterfactual: {v1_raw:.0f}<br>"
+                    "<extra></extra>"
+                ),
+                showlegend=False
+            ))
+
+        # --- original point ---
+        fig.add_trace(go.Scatter(
+            x=[f],
+            y=[v0],
+            mode="markers+text",
+            marker=dict(
+                symbol="line-ew", 
+                color="black",
+                size=10,            # increase size so the line is visible
+                opacity=1 if changed else 0.6,
+                line=dict(width=1, color="black")  
+            ),
+            text=[f"{v0_raw:.0f}"],
+            textposition="bottom center" if v1>=v0 else "top center",
+            textfont=dict(
+                size=10,
+                color="black"
+            ),
+            hovertemplate=(
+                f"<b>{f}</b><br>"
+                f"Original: {v0_raw:.0f}<br>"
+                "<extra></extra>"
+            ),
+            showlegend=False
         ))
 
     fig.update_layout(
-        title=f"Counterfactual changes (instance {instance_id})",
-        xaxis_title="Feature",
-        yaxis_title="Change",
-        margin={"l": 40, "r": 20, "t": 50, "b": 40},
+        title=f"Counterfactual Explanation (instance {instance_id})",
+        margin={"l": 40, "r": 20, "t": 50, "b": 120},
+        template="plotly_white",
+        showlegend=False,
+    )
+
+    fig.update_yaxes(
+        visible=False,
+        # showticklabels=False,
+        # showgrid=False,
+        # zeroline=False,
+        range=[-0.15, 1.15]  # allow space for text below
     )
 
     return {
@@ -836,6 +942,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
 
 # TODO: show the risk prediction distribution
 # TODO: only show the feature distribution queried by the users
+# TODO: show the feature distribution of a specific user group
 def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
     Return high-level dataset info.
