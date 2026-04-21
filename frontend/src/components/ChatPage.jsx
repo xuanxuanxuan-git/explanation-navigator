@@ -3,6 +3,7 @@ import MessageList from './MessageList.jsx'
 import MessageInput from './MessageInput.jsx'
 import { chatOnce, chatWithToolsStream } from '../api.js'
 import InstanceEditor from './InstanceEditor.jsx'
+import FigureViewer from './Dashboard.jsx'
 
 const SUGGESTED_QUESTIONS = [
   "Why is my risk of default high?",
@@ -21,10 +22,7 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
   const messagesEndRef = useRef(null)
-  const [userInstanceId, setUserInstanceId] = useState(
-    // () => Math.floor(Math.random() * 200)
-    3
-  ) 
+  const [userInstanceId] = useState(3)
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -53,7 +51,7 @@ export default function ChatPage() {
       - Do NOT hallucinate feature values or explanations
       - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them
       - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)`,
-    [userInstanceId]
+    [userInstanceId],
   )
 
   async function handleSend(text) {
@@ -61,22 +59,27 @@ export default function ChatPage() {
 
     setShowSuggestions(false)
 
-    const userMsg = { role: 'user', content: text }
+    const userMsg = { role: "user", content: text }
     setMessages(prev => [...prev, userMsg])
 
     if (!useStreaming) {
       setBusy(true)
-      // setLlmStage("thinking")
       try {
         const res = await chatOnce({
           message: text,
           history: backendHistory,
-          system
+          system,
         })
-        setMessages(prev => [...prev, { role: 'assistant', content: res.reply }])
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: res.reply },
+        ])
         setVisualisations([])
       } catch (e) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message}` }])
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: `Error: ${e.message}` },
+        ])
       } finally {
         setBusy(false)
       }
@@ -86,96 +89,146 @@ export default function ChatPage() {
     // streaming
     setBusy(true)
     setLlmStage("thinking")
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
-    setVisualisations([])
+    setMessages(prev => [...prev, { role: "assistant", content: "" }])
+    // Do NOT clear all visualisations; keep SHAP and previous plots visible.
+    // We only append new ones below.
+    // setVisualisations([])
 
     chatWithToolsStream({
       message: text,
       history: backendHistory,
       system,
       options: { temperature: 1 },
-      onToken: (token) => {
-        // model generating final response
-        // setLlmStage("rephrasing")
+      onToken: token => {
         setMessages(prev => {
           const copy = [...prev]
           const last = copy[copy.length - 1]
-          if (last?.role === 'assistant') {
+          if (last?.role === "assistant") {
             last.content += token
           }
           return copy
         })
       },
-      onVisualisations: (vizs) => {
-        setVisualisations(vizs || [])
+      onVisualisations: vizs => {
+        if (!vizs?.length) return
+        // append new figures; FigureViewer will show them under the SHAP bar
+        setVisualisations(prev => [...prev, ...vizs])
       },
-      // the complete message sent is {"done": true, "history": [...]}
-      onDone: (payload) => {
+      onDone: payload => {
         if (payload?.history) {
           setBackendHistory(payload.history)
         }
         setBusy(false)
       },
-      onError: (err) => {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${JSON.stringify(err)}` }])
+      onError: err => {
+        setMessages(prev => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Error: ${JSON.stringify(err)}`,
+          },
+        ])
         setBusy(false)
-      }
+      },
     })
   }
 
   const showInitialSuggestions =
     showSuggestions &&
     !busy &&
-    messages.filter(m => m.role === 'user').length === 0
+    messages.filter(m => m.role === "user").length === 0
 
   return (
-    <div style={{ display: 'flex', gap: 12, height: '80vh', padding: 12 }}>
-    {/* Left side: Visualisations */}
-    <div style={{ flex: 0.4, border: '1px solid #ddd', borderRadius: 8, overflow: 'auto', background: '#fafafa' }}>
-      {/* <VisualisationPanel visualisations={visualisations} /> */}
-      <InstanceEditor instanceId={userInstanceId} visualisations={visualisations} />
-    </div>
+    <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12 }}>
+      {/* Left side: Instance editor + figure viewer */}
+      <div
+        style={{
+          flex: 0.4,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+            overflow: "auto",
+          }}
+        >
+          <InstanceEditor instanceId={userInstanceId} />
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+            overflow: "auto",
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
+          <FigureViewer
+            instanceId={userInstanceId}
+            visualisations={visualisations}
+          />
+        </div>
+      </div>
 
       {/* Right side: Chat */}
-      <div style={{ flex: 0.6, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-
+      <div
+        style={{
+          flex: 0.6,
+          display: "flex",
+          flexDirection: "column",
+          position: "relative",
+        }}
+      >
         {/* Chat Container */}
-        <div style={{
-          border: '1px solid #ddd',
-          borderRadius: 8,
-          padding: 12,
-          flex: 1,
-          overflow: 'auto',
-          background: 'white'
-        }}>
-          <MessageList messages={messages} busy={busy} status={llmStage}/>
+        <div
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            padding: 12,
+            flex: 1,
+            overflow: "auto",
+            background: "white",
+          }}
+        >
+          <MessageList messages={messages} busy={busy} status={llmStage} />
           <div ref={messagesEndRef} />
         </div>
 
         {/* Floating Dialogue Suggestion Box */}
         {showInitialSuggestions && (
-          <div style={{
-            position: 'absolute',
-            bottom: 70,
-            right: 20,
-            width: 320,
-            background: 'white',
-            borderRadius: 16,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-            border: '1px solid #e5e7eb',
-            padding: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            animation: 'fadeSlide 0.4s ease forwards',
-            zIndex: 10
-          }}>
-            <div style={{
-              fontWeight: 600,
-              fontSize: 13,
-              color: '#374151',
-              marginBottom: 4
-            }}>
+          <div
+            style={{
+              position: "absolute",
+              bottom: 70,
+              right: 20,
+              width: 320,
+              background: "white",
+              borderRadius: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+              border: "1px solid #e5e7eb",
+              padding: 16,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              animation: "fadeSlide 0.4s ease forwards",
+              zIndex: 10,
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 13,
+                color: "#374151",
+                marginBottom: 4,
+              }}
+            >
               Try asking:
             </div>
 
@@ -184,20 +237,20 @@ export default function ChatPage() {
                 key={idx}
                 onClick={() => handleSend(q)}
                 style={{
-                  padding: '8px 12px',
+                  padding: "8px 12px",
                   borderRadius: 8,
-                  background: '#f3f4f6',
+                  background: "#f3f4f6",
                   fontSize: 13,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
                 }}
                 onMouseEnter={e => {
-                  e.target.style.background = '#2563eb'
-                  e.target.style.color = 'white'
+                  e.target.style.background = "#2563eb"
+                  e.target.style.color = "white"
                 }}
                 onMouseLeave={e => {
-                  e.target.style.background = '#f3f4f6'
-                  e.target.style.color = '#111'
+                  e.target.style.background = "#f3f4f6"
+                  e.target.style.color = "#111"
                 }}
               >
                 {q}
@@ -210,10 +263,9 @@ export default function ChatPage() {
         <div style={{ marginTop: 10 }}>
           <MessageInput disabled={busy} onSend={handleSend} />
         </div>
-      </div>
 
-      <style>
-        {`
+        <style>
+          {`
           @keyframes fadeSlide {
             from {
               opacity: 0;
@@ -225,8 +277,8 @@ export default function ChatPage() {
             }
           }
         `}
-      </style>
-
+        </style>
+      </div>
     </div>
   )
 }

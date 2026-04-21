@@ -106,7 +106,7 @@ export function chatWithToolsStream({ message, history = [], model, system, opti
 }
 
 export async function fetchInstance(instanceId) {
-  const res = await fetch(`http://localhost:5001/api/instance/${instanceId}`)
+  const res = await fetch(`${BASE_URL}/api/instance/${instanceId}`)
   if (!res.ok) {
     throw new Error(await res.text())
   }
@@ -114,11 +114,27 @@ export async function fetchInstance(instanceId) {
 }
 
 export async function predictInstanceWithChanges({ instance_id, changes }) {
-  const res = await fetch(`http://localhost:5001/api/instance/predict`, {
+  const res = await fetch(`${BASE_URL}/api/instance/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instance_id, changes }),
   })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}
+
+export async function generateShapBarPlot(instanceId, maxDisplay = 10) {
+  const res = await fetch(
+    `${BASE_URL}/api/instance/${instanceId}/shap-bar-plot?max_display=${encodeURIComponent(
+      maxDisplay
+    )}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    }
+  )
   if (!res.ok) {
     throw new Error(await res.text())
   }
