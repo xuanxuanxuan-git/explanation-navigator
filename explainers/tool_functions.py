@@ -8,6 +8,8 @@ import shap
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import roc_auc_score, accuracy_score
 
 import plotly.graph_objects as go
@@ -39,7 +41,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
     with _STATE_LOCK:
         if _STATE["ready"]:
             return
-        df = pd.read_csv("use_case_data/heloc_dataset.csv")  
+        df = pd.read_csv("use_case_data/heloc_dataset_selected.csv")  
         # Convert special missing codes to NaN first
         df = df.replace([-9, -8, -7], np.nan)
 
@@ -59,46 +61,42 @@ def _init_if_needed(test_size=0.2, random_state=42):
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
 
-        # scaler = StandardScaler()
-        # X_train_scaled = scaler.fit_transform(X_train)
-        # X_test_scaled = scaler.transform(X_test)
-
-        # base_model = RandomForestClassifier(
-        #     n_estimators=200,
-        #     random_state=random_state,
-        #     n_jobs=-1
-        # )
-        # base_model.fit(X_train_scaled, y_train)
-
-        # importances = base_model.feature_importances_
-        # feature_names = X.columns
-
-        # top_idx = np.argsort(importances)[::-1][:10]
-        # top_features = feature_names[top_idx]
-        # print(top_features) 
-        top_features = ['ExternalRiskEstimate', 'NetFractionRevolvingBurden', 'AverageMInFile', 'MSinceOldestTradeOpen', 'MSinceMostRecentDelq', 'PercentTradesNeverDelq', 'NetFractionInstallBurden', 'PercentTradesWBalance', 'PercentInstallTrades', 'MSinceMostRecentInqexcl7days']
+        top_features = ['Credit used (%)', 'Months since last late payment', 'On-time payment rate (%)', 'Total credit trades', 'Trades with unpaid balance (%)', 'Months since last credit application']
         
-        # Reduce dataset
-        X_train = X_train[top_features].copy()
-        X_test = X_test[top_features].copy()
-
         # Re-scale
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
 
-        model = RandomForestClassifier(
-            n_estimators=300,
-            random_state=random_state,
-            n_jobs=-1
+        # model = RandomForestClassifier(
+        #     n_estimators=300,
+        #     random_state=random_state,
+        #     n_jobs=-1
+        # )
+        # model = LogisticRegression(
+        #     random_state=42,
+        #     max_iter=1000
+        # )
+        model = MLPClassifier(
+            hidden_layer_sizes=(32, 16),
+            activation="relu",
+            solver="adam",
+            alpha=0.0001,
+            learning_rate_init=0.001,
+            max_iter=500,
+            random_state=42
         )
         model.fit(X_train_scaled, y_train)
 
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_test_scaled)
+        background = shap.sample(X_train_scaled, 50, random_state=42)
+        explainer = shap.KernelExplainer(model.predict_proba, background)
+        shap_values = explainer.shap_values(X_test_scaled[:50])[:, :, 1]
+
+        # explainer = shap.LinearExplainer(model, X_train_scaled)
+        # shap_values = explainer.shap_values(X_test_scaled)
 
         # For binary classification -> take class 1 (bad borrower)
-        shap_values = shap_values[:, :, 1]
+        # shap_values = shap_values[:, :, 1]        # dont need this line for log regression
 
         # expected_value = explainer.expected_value
         # if isinstance(expected_value, list):

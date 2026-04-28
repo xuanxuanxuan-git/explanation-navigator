@@ -751,6 +751,34 @@ def predict_instance_with_changes():
         return jsonify({"error": str(e)}), 400
 
 
+@app.get("/api/instance/<int:instance_id>/shap-bar-plot")
+def shap_bar_plot(instance_id):
+    try:
+        max_display = request.args.get("max_display", default=10, type=int)
+        result = available_tools_mapping["generate_local_shap_bar_plot"](
+            instance_id=instance_id,
+            max_display=max_display,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.get("/api/instance/<int:instance_id>/counterfactual-explanation")
+def counterfactual_explanation(instance_id):
+    try:
+        max_steps = request.args.get("max_steps", default=50, type=int)
+        target = request.args.get("target", default=None, type=float)
+        result = available_tools_mapping["get_counterfactual_explanation"](
+            instance_id=instance_id,
+            target=target,
+            max_steps=max_steps,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # =============================================================================
 # MAIN
 # =============================================================================

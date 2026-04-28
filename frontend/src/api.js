@@ -140,3 +140,25 @@ export async function generateShapBarPlot(instanceId, maxDisplay = 10) {
   }
   return res.json()
 }
+
+export async function generateCounterfactualExplanation(
+  instanceId,
+  target = 0.5,
+  maxSteps = 50,
+) {
+  const params = new URLSearchParams({
+    target: target.toString(),
+    max_steps: maxSteps.toString(),
+  })
+  const res = await fetch(
+    `${BASE_URL}/api/instance/${instanceId}/counterfactual-explanation?${params}`,
+    {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    },
+  )
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}
