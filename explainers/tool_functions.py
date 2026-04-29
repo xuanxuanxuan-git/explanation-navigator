@@ -689,10 +689,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
 
     fig.update_yaxes(
         visible=False,
-        # showticklabels=False,
-        # showgrid=False,
-        # zeroline=False,
-        range=[-0.15, 1.15]  # allow space for text below
+        range=[-0.2, 1.15]  # allow space for text below
     )
 
     return {
@@ -700,7 +697,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             "instance_id": instance_id,
             "original_prediction": round(original_pred, 4),
             "counterfactual_prediction": round(cf_pred, 4),
-            "target": round(target, 4),
+            "target": target,
             "num_features_changed": len(changes),
             "changes": changes,
         },
@@ -710,6 +707,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             meta={
                 "tool": "get_counterfactual_explanation",
                 "instance_id": instance_id,
+                "target": target,
             },
         ),
     }

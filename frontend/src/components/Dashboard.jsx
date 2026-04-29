@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import Plot from "react-plotly.js"
-import { generateShapBarPlot } from "../api.js"
+import { generateShapBarPlot, generateCounterfactualExplanation } from "../api.js"
 
 /* ---------- HELPERS ---------- */
 
 function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
   if (!viz) return null
 
-  // Direct plotly object: { type: "plotly", figure: { data, layout }, ... }
   if (viz.type === "plotly") {
     return {
       type: "plotly",
@@ -21,7 +20,6 @@ function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
     }
   }
 
-  // Nested: { visualisation: { type: "plotly", ... } }
   if (viz.visualisation?.type === "plotly") {
     return {
       type: "plotly",
@@ -35,6 +33,7 @@ function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
       },
       config: viz.visualisation?.config || { responsive: true },
       meta: viz.visualisation?.meta || {},
+      target: viz.target || viz.visualisation?.meta?.target,
     }
   }
 
@@ -43,18 +42,24 @@ function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
 
 /* ---------- MAIN COMPONENT ---------- */
 
-export default function FigureViewer({ instanceId, visualisations = [] }) {
+export default function Dashboard({ instanceId, visualisations = [], counterfactualViz, }) {
   /* SHAP state */
   const [shapViz, setShapViz] = useState(null)
   const [shapLoading, setShapLoading] = useState(false)
   const [shapError, setShapError] = useState("")
 
+  /* Counterfactual state */
+  const [cfViz, setCfViz] = useState(null)
+  const [cfLoading, setCfLoading] = useState(false)
+  const [cfError, setCfError] = useState("")
+  const [target, setTarget] = useState(0.5) // default target (editable)
+  const [cfUpdating, setCfUpdating] = useState(false)
+
   /* Extra figures carousel state */
   const [vizIndex, setVizIndex] = useState(0)
   const prevExtraCountRef = useRef(0)
 
-  /* ---------- LOAD SHAP PLOT FOR INSTANCE ---------- */
-
+  /* ---------- LOAD SHAP PLOT ---------- */
   useEffect(() => {
     async function loadShap() {
       setShapLoading(true)
@@ -77,7 +82,83 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
     loadShap()
   }, [instanceId])
 
-  /* ---------- EXTRA FIGURES (FROM CHAT) ---------- */
+  /* ---------- LOAD COUNTERFACTUAL ---------- */
+  useEffect(() => {
+    if (!counterfactualViz) return
+  
+    const norm = normaliseVisualisation(
+      counterfactualViz,
+      `Counterfactual explanation for applicant ${instanceId}`
+    )
+  
+    setCfViz(norm)
+    setCfLoading(false)
+    setCfError("")
+  
+    const t =
+      counterfactualViz?.meta?.target ??
+      counterfactualViz?.target ??
+      counterfactualViz?.data?.target ??
+      counterfactualViz?.visualisation?.meta?.target
+  
+    const parsed = Number(t)
+  
+    if (!Number.isNaN(parsed)) {
+      setTarget(parsed)
+    }
+  }, [counterfactualViz, instanceId])
+
+  const loadCounterfactual = async (tgt = target) => {
+    setCfLoading(true)
+    setCfError("")
+    try {
+      const res = await generateCounterfactualExplanation(instanceId, tgt)
+      const norm = normaliseVisualisation(
+        res,
+        `Counterfactual explanation for applicant ${instanceId}`,
+      )
+      setCfViz(norm)
+      const returnedTarget =
+        res?.data?.target ??
+        res?.target ??
+        res?.meta?.target ??
+        res?.visualisation?.meta?.target
+
+      if (returnedTarget !== undefined && returnedTarget !== null) {
+        const parsed =
+          typeof returnedTarget === "string"
+            ? parseFloat(returnedTarget)
+            : Number(returnedTarget)
+
+        if (!Number.isNaN(parsed)) {
+          setTarget(parsed)
+        }
+      }
+    } catch (e) {
+      setCfError(e.message || "Failed to load counterfactual")
+      setCfViz(null)
+    } finally {
+      setCfLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCounterfactual()
+  }, [instanceId])
+
+  const handleTargetChange = e => {
+    const newTarget = e.target.value === "" ? "" : parseFloat(e.target.value)
+    setTarget(newTarget)
+  }
+
+  const handleUpdateTarget = async () => {
+    if (cfUpdating) return
+    setCfUpdating(true)
+    await loadCounterfactual(target)
+    setCfUpdating(false)
+  }
+
+  /* ---------- EXTRA FIGURES ---------- */
 
   const extraFigures = useMemo(
     () =>
@@ -93,7 +174,6 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
   const hasExtra = extraFigures.length > 0
   const currentExtra = hasExtra ? extraFigures[vizIndex] : null
 
-  // When new extra figures arrive, jump to latest; clamp index otherwise
   useEffect(() => {
     const count = extraFigures.length
     const prevCount = prevExtraCountRef.current
@@ -128,25 +208,23 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        // height: "100%",
+        height: "100%",
         boxSizing: "border-box",
         overflowY: "auto",
       }}
     >
-      {/* ===== SHAP SECTION (OWN SPACE) ===== */}
+      {/* ===== SHAP SECTION ===== */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          borderBottom: "1px solid #e5e7eb",
-          paddingBottom: 8,
         }}
       >
 
         {shapLoading && !shapViz && (
           <div style={{ fontSize: 12, color: "#6b7280" }}>
-            Loading SHAP explanation…
+            Loading SHAP explanation
           </div>
         )}
 
@@ -177,7 +255,7 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
               data={shapViz.figure?.data || []}
               layout={{
                 autosize: true,
-                height: 320,
+                height: 260,
                 margin: { l: 140, r: 20, t: 55, b: 40 },
                 ...(shapViz.figure?.layout || {}),
               }}
@@ -186,43 +264,153 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                 displaylogo: false,
                 ...(shapViz.config || {}),
               }}
-              style={{ width: "100%", height: 320 }}
+              style={{ width: "100%", height: 260 }}
               useResizeHandler
             />
           </div>
         )}
       </div>
 
-      {/* ===== EXTRA FIGURES SECTION (CAROUSEL) ===== */}
+      {/* ===== COUNTERFACTUAL SECTION ===== */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            borderRadius: 10,
+            border: "1px solid #e5e7eb",
+            background: "#fff",
+            overflow: "hidden",
+          }}
+        >
+          {/* Target input bar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 16px",
+              background: "#f8fafc",
+              borderBottom: "1px solid #e5e7eb",
+            }}
+          >
+            <label style={{ fontSize: 12, color: "#64748b", minWidth: 50 }}>
+              Target:
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              value={target}
+              onChange={handleTargetChange}
+              style={{
+                flex: 1,
+                padding: "6px 8px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+            />
+            <button
+              onClick={handleUpdateTarget}
+              disabled={cfUpdating}
+              style={{
+                padding: "6px 16px",
+                borderRadius: 6,
+                border: "1px solid #3b82f6",
+                background: "#3b82f6",
+                color: "white",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: cfUpdating ? "default" : "pointer",
+                opacity: cfUpdating ? 0.7 : 1,
+              }}
+            >
+              {cfUpdating ? "Updating..." : "Update"}
+            </button>
+          </div>
+
+          {/* Plot below target input */}
+          <div style={{ padding: "12px 0px" }}>
+            {cfLoading && !cfViz && (
+              <div style={{ fontSize: 12, color: "#6b7280" }}>
+                Loading counterfactual
+              </div>
+            )}
+
+            {cfError && (
+              <div
+                style={{
+                  padding: 8,
+                  borderRadius: 8,
+                  background: "#fee2e2",
+                  color: "#991b1b",
+                  fontSize: 12,
+                }}
+              >
+                {cfError}
+              </div>
+            )}
+
+            {cfViz?.type === "plotly" && (
+              <div
+                style={{
+                  // borderRadius: 8,
+                  overflow: "hidden",
+                  // border: "1px solid #e5e7eb",
+                  background: "#fff",
+                }}
+              >
+                <Plot
+                  data={cfViz.figure?.data || []}
+                  layout={{
+                    autosize: true,
+                    height: 300,
+                    // margin: { l: 60, r: 30, t: 50, b: 50 },
+                    ...(cfViz.figure?.layout || {}),
+                  }}
+                  config={{
+                    responsive: true,
+                    displaylogo: false,
+                    ...(cfViz.config || {}),
+                  }}
+                  style={{ width: "100%", height: "100%" }}
+                  useResizeHandler
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== EXTRA FIGURES CAROUSEL ===== */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           gap: 10,
-          flex: 1,
-          minHeight: 0,
         }}
       >
-
         {hasExtra && currentExtra?.type === "plotly" && (
           <>
-
-            {/* Plot */}
             <div
               style={{
                 borderRadius: 12,
                 overflow: "hidden",
                 border: "1px solid #e5e7eb",
                 background: "white",
-                flex: 1,
-                minHeight: 0,
               }}
             >
               <Plot
                 data={currentExtra.figure?.data || []}
                 layout={{
                   autosize: true,
-                  height: 320,
+                  height: 260,
                   margin: { l: 60, r: 30, t: 50, b: 50 },
                   ...(currentExtra.figure?.layout || {}),
                 }}
@@ -231,12 +419,11 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                   displaylogo: false,
                   ...(currentExtra.config || {}),
                 }}
-                style={{ width: "100%", height: 320 }}
+                style={{ width: "100%", height: 260 }}
                 useResizeHandler
               />
             </div>
 
-            {/* Navigation Controls */}
             {extraFigures.length > 1 && (
               <div
                 style={{
@@ -246,11 +433,10 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                   gap: 12,
                 }}
               >
-                {/* Left */}
                 <button
                   onClick={prevViz}
                   disabled={vizIndex === 0}
-                  aria-label="Previous visualisation"
+                  aria-label="Previous"
                   style={{
                     width: 36,
                     height: 36,
@@ -263,7 +449,6 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                     alignItems: "center",
                     justifyContent: "center",
                     opacity: vizIndex === 0 ? 0.3 : 1,
-                    transition: "all 0.2s",
                   }}
                 >
                   <svg
@@ -283,13 +468,12 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                   </svg>
                 </button>
 
-                {/* Dots */}
                 <div style={{ display: "flex", gap: 6 }}>
                   {extraFigures.map((viz, i) => (
                     <button
                       key={viz.key}
                       onClick={() => setVizIndex(i)}
-                      aria-label={`Go to visualisation ${i + 1}`}
+                      aria-label={`Go to ${i + 1}`}
                       style={{
                         width: 8,
                         height: 8,
@@ -300,18 +484,16 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                           i === vizIndex
                             ? "#111827"
                             : "#d1d5db",
-                        transition: "all 0.2s",
                         cursor: "pointer",
                       }}
                     />
                   ))}
                 </div>
 
-                {/* Right */}
                 <button
                   onClick={nextViz}
                   disabled={vizIndex === extraFigures.length - 1}
-                  aria-label="Next visualisation"
+                  aria-label="Next"
                   style={{
                     width: 36,
                     height: 36,
@@ -329,7 +511,6 @@ export default function FigureViewer({ instanceId, visualisations = [] }) {
                       vizIndex === extraFigures.length - 1
                         ? 0.3
                         : 1,
-                    transition: "all 0.2s",
                   }}
                 >
                   <svg

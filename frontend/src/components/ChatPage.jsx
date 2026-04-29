@@ -3,7 +3,7 @@ import MessageList from './MessageList.jsx'
 import MessageInput from './MessageInput.jsx'
 import { chatOnce, chatWithToolsStream } from '../api.js'
 import InstanceEditor from './InstanceEditor.jsx'
-import FigureViewer from './Dashboard.jsx'
+import Dashboard from './Dashboard.jsx'
 
 const SUGGESTED_QUESTIONS = [
   "Why is my risk of default high?",
@@ -18,6 +18,7 @@ export default function ChatPage() {
   const [busy, setBusy] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [visualisations, setVisualisations] = useState([])
+  const [counterfactualViz, setCounterfactualViz] = useState(null)
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
@@ -33,17 +34,13 @@ export default function ChatPage() {
     () =>
       `You are a helpful assistant explaining a machine learning model for credit risk prediction. The user represents applicant ID ${userInstanceId} in the dataset. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model predicts probability of default (credit risk), where higher values indicate higher likelihood of default. 
 
-      Available features include 10 variables:
-      - ExternalRiskEstimate
-      - NetFractionRevolvingBurden (revolving balance divided by the credit limit)
-      - AverageMInFile (Average Months in File)
-      - MSinceOldestTradeOpen (Months Since Most Recent Trade Open)
-      - MSinceMostRecentDelq (Months Since Most Recent Delinquency)
-      - PercentTradesNeverDelq (Percent of Trades Never Delinquent)
-      - NetFractionInstallBurden (installment balance divided by the original loan amount)
-      - PercentTradesWBalance (Percent of Trades with Balance)
-      - PercentInstallTrades (Percent of Installment Trades)
-      - MSinceMostRecentInqexcl7days (Months Since Most Recent Inquiry excluding the last 7 days)
+      Available features include 6 variables:
+      - Credit used (%) -- Percentage of available credit already used        
+      - Months since last late payment -- How long since they last missed a payment
+      - On-time payment rate (%) -- How often they've paid on time
+      - Total credit trades -- Number of accounts they've had
+      - Trades with unpaid balance (%) -- How many borrowing accounts still have debt on them
+      - Months since last credit application -- How long since they last applied for credit
 
       Guidelines:
       - Keep answers concise, factual, and grounded in tool outputs
@@ -90,9 +87,6 @@ export default function ChatPage() {
     setBusy(true)
     setLlmStage("thinking")
     setMessages(prev => [...prev, { role: "assistant", content: "" }])
-    // Do NOT clear all visualisations; keep SHAP and previous plots visible.
-    // We only append new ones below.
-    // setVisualisations([])
 
     chatWithToolsStream({
       message: text,
@@ -111,8 +105,34 @@ export default function ChatPage() {
       },
       onVisualisations: vizs => {
         if (!vizs?.length) return
-        // append new figures; FigureViewer will show them under the SHAP bar
-        setVisualisations(prev => [...prev, ...vizs])
+      
+        const counterfactuals = vizs.filter(
+          v =>
+            v?.meta?.tool === "get_counterfactual_explanation" ||
+            v?.visualisation?.meta?.tool ===
+              "get_counterfactual_explanation"
+        )
+      
+        const normalVizes = vizs.filter(v => {
+          const tool =
+            v?.meta?.tool ||
+            v?.visualisation?.meta?.tool
+        
+          return (
+            tool !== "get_counterfactual_explanation" &&
+            tool !== "generate_shap_bar_plot"
+          )
+        })
+      
+        if (counterfactuals.length > 0) {
+          setCounterfactualViz(
+            JSON.parse(JSON.stringify(counterfactuals[0]))
+          )
+        }
+      
+        if (normalVizes.length > 0) {
+          setVisualisations(prev => [...prev, ...normalVizes])
+        }
       },
       onDone: payload => {
         if (payload?.history) {
@@ -140,7 +160,7 @@ export default function ChatPage() {
 
   return (
     <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12 }}>
-      {/* Left side: Instance editor + figure viewer */}
+      {/* Left side: Instance editor + dashboard */}
       <div
         style={{
           flex: 0.4,
@@ -170,9 +190,10 @@ export default function ChatPage() {
             minHeight: 0,
           }}
         >
-          <FigureViewer
+          <Dashboard
             instanceId={userInstanceId}
             visualisations={visualisations}
+            counterfactualViz={counterfactualViz}
           />
         </div>
       </div>

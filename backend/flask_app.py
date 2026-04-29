@@ -508,9 +508,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                     "type": "plotly",
                     "figure": visualisation["figure"],
                     "config": visualisation.get("config", {}),
-                    "meta": {
-                        "tool": tool_name
-                    }
+                    "meta": visualisation.get("meta", {}) 
                 })
 
     return tool_reply, visualisations
