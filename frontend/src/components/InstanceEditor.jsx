@@ -102,22 +102,23 @@ export default function InstanceEditor({ instanceId }) {
           border: "1px solid #e5e7eb",
         }}
       >
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Applicant ID</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Applicant ID: {currentInstanceId}</span>
 
-        <input
+        {/* <input
           type="number"
           value={currentInstanceId}
           readOnly
           style={{
-            width: 70,
+            width: 40,
             padding: "4px 6px",
             borderRadius: 6,
             border: "1px solid #d1d5db",
             background: "#f9fafb",
           }}
-        />
+        /> */}
 
         <div style={{ marginLeft: "auto", fontSize: 13 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Default Risk: </span>
           <b>{prediction != null ? Number(prediction).toFixed(4) : "—"}</b>
         </div>
       </div>
