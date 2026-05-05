@@ -68,15 +68,6 @@ def _init_if_needed(test_size=0.2, random_state=42):
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
 
-        # model = RandomForestClassifier(
-        #     n_estimators=300,
-        #     random_state=random_state,
-        #     n_jobs=-1
-        # )
-        # model = LogisticRegression(
-        #     random_state=42,
-        #     max_iter=1000
-        # )
         model = MLPClassifier(
             hidden_layer_sizes=(32, 16),
             activation="relu",
@@ -90,17 +81,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
 
         background = shap.sample(X_train_scaled, 50, random_state=42)
         explainer = shap.KernelExplainer(model.predict_proba, background)
-        shap_values = explainer.shap_values(X_test_scaled[:50])[:, :, 1]
-
-        # explainer = shap.LinearExplainer(model, X_train_scaled)
-        # shap_values = explainer.shap_values(X_test_scaled)
-
-        # For binary classification -> take class 1 (bad borrower)
-        # shap_values = shap_values[:, :, 1]        # dont need this line for log regression
-
-        # expected_value = explainer.expected_value
-        # if isinstance(expected_value, list):
-        #     expected_value = expected_value[1]
+        shap_values = explainer.shap_values(X_test_scaled[:100])[:, :, 1]
 
         _STATE.update({
             "X_train": X_train.reset_index(drop=True),
@@ -176,7 +157,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
     # For horizontal bars: feature names on Y, SHAP values on X
     features = [r["feature"] for r in rows_sorted][::-1]
     values = [r["shap_value"] for r in rows_sorted][::-1]
-    colors = ["#ef4444" if v < 0 else "#3b82f6" for v in values]
+    colors = ["#ef4444" if v >= 0 else "#3b82f6" for v in values]
 
     fig = go.Figure(
         data=[go.Bar(
@@ -185,12 +166,12 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             orientation="h",
             marker={"color": colors},
             customdata=features,
-            hovertemplate="Feature: %{y}<br>SHAP: %{x:.4f}<extra></extra>",
+            hovertemplate="Factor: %{y}<br>Contribution: %{x:.4f}<extra></extra>",
         )],
         layout=go.Layout(
-            title=f"Local feature attribution for instance {instance_id}",
-            xaxis={"title": "SHAP value"},
-            yaxis={"title": "Feature"},
+            title=f"Factors contributing to the applicant's result",
+            xaxis={"title": "Contribution to risk"},
+            # yaxis={"title": "Factor"},
             margin={"l": 140, "r": 20, "t": 55, "b": 40},
         ),
     )
@@ -253,12 +234,12 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             orientation="h",
             marker={"color": ["#10b981"] * len(x)},
             customdata=y,
-            hovertemplate="Feature: %{y}<br>Mean |SHAP|: %{x:.4f}<extra></extra>",
+            hovertemplate="Feature: %{y}<br>Importance: %{x:.4f}<extra></extra>",
         )],
         layout=go.Layout(
             title=title,
-            xaxis={"title": "Mean |SHAP|"},
-            yaxis={"title": "Feature"},
+            xaxis={"title": "System-level importance"},
+            # yaxis={"title": "Feature"},
             margin={"l": 120, "r": 20, "t": 55, "b": 40},
         ),
     )
@@ -280,16 +261,46 @@ def get_instance_features_and_prediction(instance_id: int):
 
     model = _STATE["model"]
     X_test = _STATE["X_test"]
+    X_train = _STATE["X_train"]
     X_scaled = _STATE["X_test_scaled"]
 
-    x = X_scaled[[instance_id]]
-    # pred = float(model.predict(x)[0])
-    pred = float(model.predict_proba(x)[0][1])
+    x_raw = X_test.iloc[instance_id]
+    x_scaled = X_scaled[[instance_id]]
+
+    pred = float(model.predict_proba(x_scaled)[0][1])
+
+    feature_info = {}
+
+    for col in X_test.columns:
+        train_col = X_train[col].astype(float)
+
+        q1 = float(train_col.quantile(0.01))
+        q99 = float(train_col.quantile(0.99))
+
+        val = float(x_raw[col])
+
+        # clip to range
+        clipped = max(min(val, q99), q1)
+
+        # normalise 0-1
+        if abs(q99 - q1) < 1e-9:
+            norm = 0.5
+        else:
+            norm = (clipped - q1) / (q99 - q1)
+
+        feature_info[col] = {
+            "value": val,
+            "min": round(q1, 4),
+            "max": round(q99, 4),
+            "normalised": round(norm, 4),
+        }
 
     return {
-        "data": {"instance_id": instance_id,
-            "instance_features": X_test.iloc[instance_id].to_dict(),
-            "prediction": round(pred, 4)},
+        "data": {
+            "instance_id": instance_id,
+            "features": feature_info,
+            "prediction": round(pred, 4),
+        },
         "visualisation": None,
     }
 
@@ -379,7 +390,10 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
         layout=go.Layout(
             title=f"CP plot -- instance {instance_id}, feature: {feature}",
             xaxis={"title": feature},
-            yaxis={"title": "Probability of default"},
+            yaxis={"title": "Probability of default",             
+                "range": [0, 1],      # set y-axis fixed range
+                # "tickformat": ".0%"   # optional: show as percentages},
+            },   
             margin={"l": 60, "r": 20, "t": 55, "b": 40},
         ),
     )
@@ -458,9 +472,9 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     )
 
     fig.update_layout(
-        title=f"Partial Dependence Plot — {feature}",
+        title=f"Partial Dependence Plot -- {feature}",
         xaxis={"title": feature},
-        yaxis={"title": "Average prediction"},
+        yaxis={"title": "Average prediction", "range": [0, 1]},
         margin={"l": 60, "r": 60, "t": 55, "b": 40},
     )
 
@@ -479,7 +493,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
             },
         ),
     }
-
+# TODO: change to a new algorithm
 def get_counterfactual_explanation(instance_id: int, target: float = None, max_steps: int = 50):
     """
     Generate a counterfactual explanation for an instance.
@@ -681,7 +695,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         ))
 
     fig.update_layout(
-        title=f"Counterfactual Explanation (instance {instance_id})",
+        title=f"Actions to reduce risk",
         margin={"l": 40, "r": 20, "t": 50, "b": 120},
         template="plotly_white",
         showlegend=False,

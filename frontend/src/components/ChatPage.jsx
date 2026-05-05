@@ -23,7 +23,7 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
   const messagesEndRef = useRef(null)
-  const [userInstanceId] = useState(3)
+  const [userInstanceId] = useState(28)
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
