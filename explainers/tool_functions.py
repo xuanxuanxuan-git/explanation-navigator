@@ -4,6 +4,7 @@ import threading
 import numpy as np
 import pandas as pd
 import shap
+import dice_ml
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -388,7 +389,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
             ),
         ],
         layout=go.Layout(
-            title=f"CP plot -- instance {instance_id}, feature: {feature}",
+            title=f"Effect of {feature} on predicted result",
             xaxis={"title": feature},
             yaxis={"title": "Probability of default",             
                 "range": [0, 1],      # set y-axis fixed range
@@ -472,7 +473,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     )
 
     fig.update_layout(
-        title=f"Partial Dependence Plot -- {feature}",
+        title=f"Average effect of {feature} on predicted result",
         xaxis={"title": feature},
         yaxis={"title": "Average prediction", "range": [0, 1]},
         margin={"l": 60, "r": 60, "t": 55, "b": 40},

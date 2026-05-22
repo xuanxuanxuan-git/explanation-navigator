@@ -1,6 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { fetchInstance, predictInstanceWithChanges } from "../api.js"
 
+const FEATURE_ORDER = [
+  "Credit used (%)",
+  "Total credit trades",        
+  "On-time payment rate (%)",
+  "Months since last late payment",
+  "Trades with unpaid balance (%)",
+  "Months since last credit application",
+]
+
+const FEATURE_DISPLAY_CONFIG = {
+  "Credit used (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "On-time payment rate (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Trades with unpaid balance (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Total credit trades": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Months since last late payment": { displayMin: 0, displayMax: 96, decimals: 0 },
+  "Months since last credit application": { displayMin: 0, displayMax: 48, decimals: 0 },
+}
+
 export default function InstanceEditor({ instanceId }) {
   const [currentInstanceId, setCurrentInstanceId] = useState(instanceId)
   const [loading, setLoading] = useState(false)
@@ -24,8 +42,7 @@ export default function InstanceEditor({ instanceId }) {
       const p = data.prediction
 
       setFeatures(f)
-      setOriginalFeatures(JSON.parse(JSON.stringify(f))) // deep copy
-
+      setOriginalFeatures(JSON.parse(JSON.stringify(f)))
       setPrediction(p)
       setOriginalPrediction(p)
     } catch (e) {
@@ -40,20 +57,26 @@ export default function InstanceEditor({ instanceId }) {
     loadInstance(instanceId)
   }, [instanceId])
 
-  // ----------------------------
-  // Handle slider change
-  // ----------------------------
-  function handleSliderChange(name, normVal) {
+  function handleSliderChange(name, sliderVal) {
     setFeatures(prev => {
       const f = prev[name]
-      const realVal = f.min + normVal * (f.max - f.min)
+      const config = FEATURE_DISPLAY_CONFIG[name] || {}
+
+      const displayMin = config.displayMin ?? f.min
+      const displayMax = config.displayMax ?? f.max
+
+      const clampedVal = Math.min(displayMax, Math.max(displayMin, sliderVal))
+      const normalised =
+        displayMax === displayMin
+          ? 0
+          : (clampedVal - displayMin) / (displayMax - displayMin)
 
       return {
         ...prev,
         [name]: {
           ...f,
-          value: realVal,
-          normalised: normVal,
+          value: clampedVal,
+          normalised,
         },
       }
     })
@@ -77,9 +100,19 @@ export default function InstanceEditor({ instanceId }) {
     return out
   }, [features, originalFeatures])
 
-  // ----------------------------
-  // Recalculate prediction
-  // ----------------------------
+  // 3) Build ordered feature list for rendering
+  const orderedFeatureEntries = useMemo(() => {
+    const entries = Object.entries(features)
+
+    const inSpecifiedOrder = FEATURE_ORDER
+      .filter(name => features[name])
+      .map(name => [name, features[name]])
+
+    const remaining = entries.filter(([name]) => !FEATURE_ORDER.includes(name))
+
+    return [...inSpecifiedOrder, ...remaining]
+  }, [features])
+
   async function handleRecalculate() {
     if (!Object.keys(changedFields).length) return
 
@@ -161,11 +194,11 @@ export default function InstanceEditor({ instanceId }) {
             zIndex: 1,
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
             Applicant ID: {currentInstanceId}
           </span>
 
-          <div style={{ marginLeft: "auto", fontSize: 13, color: "#111827" }}>
+          <div style={{ marginLeft: "auto", fontSize: 13, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
             <span style={{ fontWeight: 600 }}>Default Risk: </span>
             <b>
               {prediction != null ? Number(prediction).toFixed(4) : "—"}
@@ -185,11 +218,16 @@ export default function InstanceEditor({ instanceId }) {
             background: "#fff",
           }}
         >
-          {Object.entries(features).map(([name, f]) => {
-            const { value, min, max, normalised } = f
+          {orderedFeatureEntries.map(([name, f]) => {
+            const config = FEATURE_DISPLAY_CONFIG[name] || {}
+            const decimals = config.decimals ?? 2
 
-            const originalVal = originalFeatures[name]?.value
-            const isChanged = Number(value) !== Number(originalVal)
+            const sliderMin = config.displayMin ?? f.min
+            const sliderMax = config.displayMax ?? f.max
+
+            const value = Number(f.value)
+            const originalVal = Number(originalFeatures[name]?.value)
+            const isChanged = value !== originalVal
 
             return (
               <div
@@ -204,7 +242,7 @@ export default function InstanceEditor({ instanceId }) {
                 }}
               >
                 {/* Feature name */}
-                <label style={{ fontSize: 11, color: "#111827" }}>
+                <label style={{ fontSize: 11, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
                   {name}
                 </label>
 
@@ -226,16 +264,16 @@ export default function InstanceEditor({ instanceId }) {
                       textAlign: "right",
                     }}
                   >
-                    {min.toFixed(0)}
+                    {Number(sliderMin).toFixed(decimals)}
                   </span>
 
                   {/* Slider */}
                   <input
                     type="range"
-                    min={0}
-                    max={1}
-                    step={0.001}
-                    value={normalised}
+                    min={sliderMin}
+                    max={sliderMax}
+                    step={1}
+                    value={value}
                     onChange={e =>
                       handleSliderChange(name, Number(e.target.value))
                     }
@@ -243,7 +281,7 @@ export default function InstanceEditor({ instanceId }) {
                       WebkitAppearance: "none",
                       appearance: "none",
                       width: "100%",
-                      height: "4.1pt",
+                      height: "4.1pt",  /* gray bar height*/
                       background: "#e5e7eb", /* gray bar */
                       borderRadius: "999px",
                       outline: "none",
@@ -257,7 +295,7 @@ export default function InstanceEditor({ instanceId }) {
                       color: "#9ca3af",
                     }}
                   >
-                    {max.toFixed(0)}
+                    {Number(sliderMax).toFixed(decimals)}
                   </span>
                 </div>
 
@@ -269,7 +307,7 @@ export default function InstanceEditor({ instanceId }) {
                     color: "#111827",
                   }}
                 >
-                  {value.toFixed(2)}
+                  {value.toFixed(decimals)}
                 </div>
               </div>
             )
@@ -281,9 +319,7 @@ export default function InstanceEditor({ instanceId }) {
       <div style={{ display: "flex", gap: 8 }}>
         <button
           onClick={handleRecalculate}
-          disabled={
-            loading || !Object.keys(changedFields).length
-          }
+          disabled={loading || !Object.keys(changedFields).length}
           style={{
             flex: 1,
             padding: "8px",
@@ -293,8 +329,7 @@ export default function InstanceEditor({ instanceId }) {
             color: "white",
             fontSize: 13,
             cursor:
-              loading ||
-                !Object.keys(changedFields).length
+              loading || !Object.keys(changedFields).length
                 ? "default"
                 : "pointer",
             opacity: loading ? 0.6 : 1,
@@ -318,6 +353,6 @@ export default function InstanceEditor({ instanceId }) {
           Reset
         </button>
       </div>
-    </div >
+    </div>
   )
 }
