@@ -80,7 +80,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
         )
         model.fit(X_train_scaled, y_train)
 
-        background = shap.sample(X_train_scaled, 50, random_state=42)
+        background = shap.sample(X_train_scaled, 100, random_state=42)
         explainer = shap.KernelExplainer(model.predict_proba, background)
         shap_values = explainer.shap_values(X_test_scaled[:100])[:, :, 1]
 
@@ -353,6 +353,14 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     X_test = _STATE["X_test"]
     scaler = _STATE["scaler"]
     model = _STATE["model"]
+    feature_ranges = {
+        "Credit used (%)": {"min": 0, "max": 100},
+        "Months since last credit application": {"min": 0, "max": 48},
+        "On-time payment rate (%)": {"min": 0, "max": 100},
+        "Months since last late payment": {"min": 0, "max": 96},
+        "Trades with unpaid balance (%)": {"min": 0, "max": 100},
+        "Total credit trades": {"min": 0, "max": 100},
+    }
 
     if feature not in X_test.columns:
         return {"data": f"Unknown feature '{feature}'.", "visualisation": None}
@@ -361,7 +369,9 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     base_val = float(x0[feature].iloc[0])
 
     col = X_test[feature].astype(float)
-    grid = np.linspace(float(col.min()), float(col.max()), grid_points)
+    x_min = float(feature_ranges.get(feature).get("min"))
+    x_max = float(feature_ranges.get(feature).get("max"))
+    grid = np.linspace(x_min, x_max, grid_points)
 
     preds = []
     for v in grid:
@@ -376,7 +386,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
                 y=preds,
                 mode="lines",
                 line={"color": "#6366f1"},
-                hovertemplate=f"{feature}: %{{x:.4f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
+                hovertemplate=f"{feature}: %{{x:.0f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
                 showlegend=False,
             ),
             go.Scatter(
@@ -384,13 +394,13 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
                 y=[base_pred],
                 mode="markers",
                 marker={"size": 10, "color": "#ef4444"},
-                hovertemplate=f"Current {feature}: %{{x:.4f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
+                hovertemplate=f"Current {feature}: %{{x:.0f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
                 showlegend=False,
             ),
         ],
         layout=go.Layout(
             title=f"Effect of {feature} on predicted result",
-            xaxis={"title": feature},
+            xaxis={"title": feature, "range": [x_min, x_max]},
             yaxis={"title": "Probability of default",             
                 "range": [0, 1],      # set y-axis fixed range
                 # "tickformat": ".0%"   # optional: show as percentages},

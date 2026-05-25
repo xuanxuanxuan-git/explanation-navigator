@@ -3,20 +3,20 @@ import { fetchInstance, predictInstanceWithChanges } from "../api.js"
 
 const FEATURE_ORDER = [
   "Credit used (%)",
-  "Total credit trades",        
+  "Months since last credit application",
   "On-time payment rate (%)",
   "Months since last late payment",
   "Trades with unpaid balance (%)",
-  "Months since last credit application",
+  "Total credit trades",       
 ]
 
 const FEATURE_DISPLAY_CONFIG = {
   "Credit used (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Months since last credit application": { displayMin: 0, displayMax: 48, decimals: 0 },
   "On-time payment rate (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Months since last late payment": { displayMin: 0, displayMax: 96, decimals: 0 },
   "Trades with unpaid balance (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
   "Total credit trades": { displayMin: 0, displayMax: 100, decimals: 0 },
-  "Months since last late payment": { displayMin: 0, displayMax: 96, decimals: 0 },
-  "Months since last credit application": { displayMin: 0, displayMax: 48, decimals: 0 },
 }
 
 export default function InstanceEditor({ instanceId }) {
