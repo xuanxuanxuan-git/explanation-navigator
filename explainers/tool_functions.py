@@ -33,6 +33,14 @@ _STATE = {
     "explainer": None,
     "shap_values": None,          # np.ndarray (n_test, n_features)
     "expected_value": None,       # float
+    "feature_ranges": {
+        "Credit used (%)": {"min": 0, "max": 100},
+        "Months since last credit application": {"min": 0, "max": 48},
+        "On-time payment rate (%)": {"min": 0, "max": 100},
+        "Months since last late payment": {"min": 0, "max": 96},
+        "Trades with unpaid balance (%)": {"min": 0, "max": 100},
+        "Total credit trades": {"min": 0, "max": 100},
+    }
 }
 
 def _init_if_needed(test_size=0.2, random_state=42):
@@ -61,7 +69,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
-
+        # TODO: rename the features in the dataset and here
         top_features = ['Credit used (%)', 'Months since last late payment', 'On-time payment rate (%)', 'Total credit trades', 'Trades with unpaid balance (%)', 'Months since last credit application']
         
         # Re-scale
@@ -82,7 +90,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
 
         background = shap.sample(X_train_scaled, 100, random_state=42)
         explainer = shap.KernelExplainer(model.predict_proba, background)
-        shap_values = explainer.shap_values(X_test_scaled[:100])[:, :, 1]
+        shap_values = explainer.shap_values(X_test_scaled[:100])[:, :, 0]*100
 
         _STATE.update({
             "X_train": X_train.reset_index(drop=True),
@@ -167,11 +175,11 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             orientation="h",
             marker={"color": colors},
             customdata=features,
-            hovertemplate="Factor: %{y}<br>Contribution: %{x:.4f}<extra></extra>",
+            hovertemplate="Factor: %{y}<br>Contribution: %{x:.0f}<extra></extra>",
         )],
         layout=go.Layout(
             title=f"Factors contributing to the applicant's result",
-            xaxis={"title": "Contribution to risk"},
+            xaxis={"title": "Contribution to score"},
             # yaxis={"title": "Factor"},
             margin={"l": 140, "r": 20, "t": 55, "b": 40},
         ),
@@ -235,7 +243,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             orientation="h",
             marker={"color": ["#10b981"] * len(x)},
             customdata=y,
-            hovertemplate="Feature: %{y}<br>Importance: %{x:.4f}<extra></extra>",
+            hovertemplate="Factor: %{y}<br>Importance: %{x:.0f}<extra></extra>",
         )],
         layout=go.Layout(
             title=title,
@@ -268,7 +276,7 @@ def get_instance_features_and_prediction(instance_id: int):
     x_raw = X_test.iloc[instance_id]
     x_scaled = X_scaled[[instance_id]]
 
-    pred = float(model.predict_proba(x_scaled)[0][1])
+    pred = float(model.predict_proba(x_scaled)[0][0]) * 100
 
     feature_info = {}
 
@@ -300,7 +308,7 @@ def get_instance_features_and_prediction(instance_id: int):
         "data": {
             "instance_id": instance_id,
             "features": feature_info,
-            "prediction": round(pred, 4),
+            "prediction": int(round(pred)),
         },
         "visualisation": None,
     }
@@ -330,18 +338,18 @@ def get_average_prediction(source: str = "all", indices=None):
     else:
         return {"data": f"Unknown source='{source}'. Use 'test' or 'indices'.", "visualisation": None}
 
-    preds = model.predict_proba(X)[:, 1]
+    preds = model.predict_proba(X)[:, 0]*100
     avg = float(np.mean(preds))
     return {
         "data": {
             "source": source,
             "count": int(len(X)),
-            "average_probability_of_default": round(avg, 4),
+            "average_credit_score": int(round(avg)),
         },
         "visualisation": None,
     }
 
-# Change in probability of predicting as bad borrower
+# Change in credit score
 def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     _init_if_needed()
     instance_id = int(instance_id)
@@ -353,14 +361,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     X_test = _STATE["X_test"]
     scaler = _STATE["scaler"]
     model = _STATE["model"]
-    feature_ranges = {
-        "Credit used (%)": {"min": 0, "max": 100},
-        "Months since last credit application": {"min": 0, "max": 48},
-        "On-time payment rate (%)": {"min": 0, "max": 100},
-        "Months since last late payment": {"min": 0, "max": 96},
-        "Trades with unpaid balance (%)": {"min": 0, "max": 100},
-        "Total credit trades": {"min": 0, "max": 100},
-    }
+    feature_ranges = _STATE["feature_ranges"]
 
     if feature not in X_test.columns:
         return {"data": f"Unknown feature '{feature}'.", "visualisation": None}
@@ -368,7 +369,6 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     x0 = X_test.iloc[[instance_id]].copy()
     base_val = float(x0[feature].iloc[0])
 
-    col = X_test[feature].astype(float)
     x_min = float(feature_ranges.get(feature).get("min"))
     x_max = float(feature_ranges.get(feature).get("max"))
     grid = np.linspace(x_min, x_max, grid_points)
@@ -377,8 +377,8 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
     for v in grid:
         xv = x0.copy()
         xv[feature] = v
-        preds.append(float(model.predict_proba(scaler.transform(xv))[0][1]))
-    base_pred = float(model.predict_proba(scaler.transform(x0))[0][1])
+        preds.append(float(model.predict_proba(scaler.transform(xv))[0][0])*100)
+    base_pred = float(model.predict_proba(scaler.transform(x0))[0][0]*100)
     fig = go.Figure(
         data=[
             go.Scatter(
@@ -386,7 +386,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
                 y=preds,
                 mode="lines",
                 line={"color": "#6366f1"},
-                hovertemplate=f"{feature}: %{{x:.0f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
+                hovertemplate=f"{feature}: %{{x:.2f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
                 showlegend=False,
             ),
             go.Scatter(
@@ -394,15 +394,15 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
                 y=[base_pred],
                 mode="markers",
                 marker={"size": 10, "color": "#ef4444"},
-                hovertemplate=f"Current {feature}: %{{x:.0f}}<br>Prediction: %{{y:.4f}}<extra></extra>",
+                hovertemplate=f"Current {feature}: %{{x:.2f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
                 showlegend=False,
             ),
         ],
         layout=go.Layout(
-            title=f"Effect of {feature} on predicted result",
+            title=f"Effect of {feature} on predicted score",
             xaxis={"title": feature, "range": [x_min, x_max]},
-            yaxis={"title": "Probability of default",             
-                "range": [0, 1],      # set y-axis fixed range
+            yaxis={"title": "Credit score",             
+                "range": [0, 100],      # set y-axis fixed range
                 # "tickformat": ".0%"   # optional: show as percentages},
             },   
             margin={"l": 60, "r": 20, "t": 55, "b": 40},
@@ -414,12 +414,11 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
             "instance_id": instance_id,
             "feature": feature,
             "base_value": base_val,
-            "grid": [round(v, 4) for v in grid.tolist()],
-            "prediction": [round(p, 4) for p in preds],
+            "grid": [round(v, 2) for v in grid.tolist()],
+            "prediction": [int(round(p)) for p in preds],
         },
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
-
 
 def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     """
@@ -437,14 +436,16 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     X_scaled = _STATE["X_test_scaled"]
     model = _STATE["model"]
     scaler = _STATE["scaler"]
+    feature_ranges = _STATE["feature_ranges"]
 
     if feature not in X_test.columns:
         return {"data": f"Unknown feature '{feature}'.", "visualisation": None}
 
     feature_idx = X_test.columns.get_loc(feature)
 
-    col = X_test[feature].astype(float)
-    grid = np.linspace(col.min(), col.max(), grid_points)
+    x_min = float(feature_ranges.get(feature).get("min"))
+    x_max = float(feature_ranges.get(feature).get("max"))
+    grid = np.linspace(x_min, x_max, grid_points)
 
     # --------- SCALE GRID CORRECTLY ----------
     col_mean = scaler.mean_[feature_idx]
@@ -463,7 +464,13 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     # Replace feature column
     X_rep[:, feature_idx] = grid_tiled
 
-    preds = model.predict_proba(X_rep)[:, 1]
+    # Predict in chunks 
+    preds = np.zeros(n * grid_points)
+    chunk_size = 10000
+    for i in range(0, len(X_rep), chunk_size):
+        # Predict on a chunk, extract probability of class 0, and multiply by 100
+        preds[i : i + chunk_size] = model.predict_proba(X_rep[i : i + chunk_size])[:, 0] * 100
+
     preds = preds.reshape(n, grid_points)
     pdp_values = preds.mean(axis=0)
 
@@ -478,22 +485,22 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
             mode="lines",
             line={"color": "#2563eb"},
             name="PDP",
-            hovertemplate=f"{feature}: %{{x:.2f}}<br>Avg Prediction: %{{y:.4f}}<extra></extra>",
+            hovertemplate=f"{feature}: %{{x:.2f}}<br>Avg Prediction: %{{y:.0f}}<extra></extra>",
         )
     )
 
     fig.update_layout(
-        title=f"Average effect of {feature} on predicted result",
-        xaxis={"title": feature},
-        yaxis={"title": "Average prediction", "range": [0, 1]},
-        margin={"l": 60, "r": 60, "t": 55, "b": 40},
+        title=f"Average effect of {feature}",
+        xaxis={"title": feature, "range": [x_min, x_max]},
+        yaxis={"title": "Average score", "range": [0, 100]},
+        margin={"l": 60, "r": 20, "t": 55, "b": 40},
     )
 
     return {
         "data": {
             "feature": feature,
-            "grid": [round(v, 4) for v in grid.tolist()],
-            "average_prediction": [round(p, 4) for p in pdp_values.tolist()],
+            "grid": [round(v, 2) for v in grid.tolist()],
+            "average_prediction": [int(round(p)) for p in pdp_values.tolist()],
         },
         "visualisation": _plotly_payload(
             fig,
@@ -526,7 +533,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     x0 = X_test.iloc[[instance_id]].copy()
     x_cf = x0.copy()
 
-    original_pred = float(model.predict_proba(scaler.transform(x0))[0][1])
+    original_pred = float(model.predict_proba(scaler.transform(x0))[0][0]) * 100
 
     # Default target: decrease the probability by 20%
     # TODO: fix
@@ -562,7 +569,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 temp = x_cf.copy()
                 temp[f] = v
 
-                pred = float(model.predict_proba(scaler.transform(temp))[0][1])
+                pred = float(model.predict_proba(scaler.transform(temp))[0][0])*100
 
                 # move closer to target
                 if abs(pred - target) < abs(best_pred - target):
@@ -595,7 +602,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 "delta": round(v1 - v0, 4),
             }
 
-    cf_pred = float(model.predict_proba(scaler.transform(x_cf))[0][1])
+    cf_pred = float(model.predict_proba(scaler.transform(x_cf))[0][0])*100
 
     # ---------- VISUALISATION ----------
     fig = go.Figure()
@@ -706,7 +713,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         ))
 
     fig.update_layout(
-        title=f"Actions to reduce risk",
+        title=f"Actions to improve score",
         margin={"l": 40, "r": 20, "t": 50, "b": 120},
         template="plotly_white",
         showlegend=False,
@@ -720,8 +727,8 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     return {
         "data": {
             "instance_id": instance_id,
-            "original_prediction": round(original_pred, 4),
-            "counterfactual_prediction": round(cf_pred, 4),
+            "original_prediction": int(round(original_pred)),
+            "counterfactual_prediction": int(round(cf_pred)),
             "target": target,
             "num_features_changed": len(changes),
             "changes": changes,
@@ -775,7 +782,7 @@ def get_similar_instances(instance_id: int, k: int = 3):
             "instance_features": {
                 col: float(X_test.iloc[idx][col]) for col in X_test.columns
             },
-            "prediction": round(float(_STATE["model"].predict_proba([X_scaled[idx]])[0][1]), 4),
+            "prediction": int(round(float(_STATE["model"].predict_proba([X_scaled[idx]])[0][0])*100)),
             # "target": float(y_test[idx])
         })
 
@@ -818,7 +825,7 @@ def get_representative_instances(indices: list, k: int = 3):
     rep_indices = [indices[i] for i in top_positions]
 
     # batch predictions
-    preds = model.predict_proba(X_scaled[rep_indices])[:, 1]
+    preds = model.predict_proba(X_scaled[rep_indices])[:, 0]*100
 
     rows = []
     for i, idx in enumerate(rep_indices):
@@ -827,7 +834,7 @@ def get_representative_instances(indices: list, k: int = 3):
             "instance_features": {
                 col: float(X_test.iloc[idx][col]) for col in X_test.columns
             },
-            "prediction": round(float(preds[i]), 4)
+            "prediction": int(round(float(preds[i])))
         })
 
     return {
@@ -854,7 +861,7 @@ def get_subgroup(filters: dict):
     df = X_test.copy()
 
     # Add predicted risk column so it can be filtered
-    preds = model.predict_proba(X_scaled)[:, 1]
+    preds = model.predict_proba(X_scaled)[:, 0]*100
     df["prediction"] = preds
 
     valid_features = set(df.columns)
@@ -937,7 +944,7 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
     X_test = _STATE["X_test"]
 
     x0 = X_test.iloc[[instance_id]].copy()
-    pred0 = float(model.predict_proba(scaler.transform(x0))[0][1])
+    pred0 = float(model.predict_proba(scaler.transform(x0))[0][0])*100
 
     x1 = x0.copy()
     for feat, val in changes.items():
@@ -945,14 +952,14 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
             return {"data": f"Unknown feature '{feat}'.", "visualisation": None}
         x1[feat] = float(val)
 
-    pred1 = float(model.predict_proba(scaler.transform(x1))[0][1])
+    pred1 = float(model.predict_proba(scaler.transform(x1))[0][0])*100
 
     return {
         "data": {
             "instance_id": instance_id,
-            "original_prediction": round(pred0, 4),
-            "new_prediction": round(pred1, 4),
-            "change_in_prediction": float(pred1 - pred0),
+            "original_prediction": int(round(pred0)),
+            "new_prediction": int(round(pred1)),
+            "change_in_prediction": int(round(pred1 - pred0)),
             "changes": {k: float(v) for k, v in changes.items()},
             "original_values": {k: float(x0[k].iloc[0]) for k in changes.keys()},
             "new_values": {k: float(x1[k].iloc[0]) for k in changes.keys()},
@@ -991,7 +998,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         "train_instances": int(len(X_train)),
         "num_features": int(len(X_train.columns)),
         "features": X_train.columns.tolist(),
-        "target": "Probability of default",
+        "target": "Credit score",
         "target_statistics": {
             "mean": round(float(np.mean(y_train)), 3),
             "min": round(float(np.min(y_train)), 3),
@@ -1100,14 +1107,14 @@ def model_meta():
 
     X_scaled = scaler.transform(X_test)
 
-    preds = model.predict_proba(X_scaled)[:, 1]
+    preds = model.predict_proba(X_scaled)[:, 0] * 100
 
     accuracy = accuracy_score(y_test, preds > 0.5)
 
     return {
         # "data": {
-            "model_type": "Random Forest Classifier",
-            "prediction_task": "Predicting default risk of borrowers",
+            "model_type": "Neural Network Classifier",
+            "prediction_task": "Predicting credit score of applicants",
             "evaluation_metrics": {
                 "accuracy": round(accuracy, 4)
             # },
