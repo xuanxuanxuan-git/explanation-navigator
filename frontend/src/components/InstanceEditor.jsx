@@ -199,9 +199,9 @@ export default function InstanceEditor({ instanceId }) {
           </span>
 
           <div style={{ marginLeft: "auto", fontSize: 13, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
-            <span style={{ fontWeight: 600 }}>Default Risk: </span>
+            <span style={{ fontWeight: 600 }}>Credit Score: </span>
             <b>
-              {prediction != null ? Number(prediction).toFixed(4) : "—"}
+              {prediction != null ? Number(prediction).toFixed(0) : "—"}
             </b>
           </div>
         </div>

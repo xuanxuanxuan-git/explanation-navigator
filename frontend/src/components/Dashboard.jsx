@@ -52,7 +52,7 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
   const [cfViz, setCfViz] = useState(null)
   const [cfLoading, setCfLoading] = useState(false)
   const [cfError, setCfError] = useState("")
-  const [target, setTarget] = useState(0.5) // default target (editable)
+  const [target, setTarget] = useState(50) // default target for counterfactual explanation (editable)
   const [cfUpdating, setCfUpdating] = useState(false)
 
   /* Extra figures carousel state */
@@ -303,9 +303,9 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
             </label>
             <input
               type="number"
-              step="0.01"
+              step="1"
               min="0"
-              max="1"
+              max="100"
               value={target}
               onChange={handleTargetChange}
               style={{

@@ -143,7 +143,7 @@ export async function generateShapBarPlot(instanceId, maxDisplay = 10) {
 
 export async function generateCounterfactualExplanation(
   instanceId,
-  target = 0.5,
+  target = 50,
   maxSteps = 50,
 ) {
   const params = new URLSearchParams({
