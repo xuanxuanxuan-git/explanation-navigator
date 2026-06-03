@@ -6,8 +6,8 @@ const FEATURE_ORDER = [
   "Months since last credit application",
   "On-time payment rate (%)",
   "Months since last late payment",
-  "Trades with unpaid balance (%)",
-  "Total credit trades",       
+  "Loans not paid off (%)",
+  "Number of loans",       
 ]
 
 const FEATURE_DISPLAY_CONFIG = {
@@ -15,8 +15,8 @@ const FEATURE_DISPLAY_CONFIG = {
   "Months since last credit application": { displayMin: 0, displayMax: 48, decimals: 0 },
   "On-time payment rate (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
   "Months since last late payment": { displayMin: 0, displayMax: 96, decimals: 0 },
-  "Trades with unpaid balance (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
-  "Total credit trades": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Loans not paid off (%)": { displayMin: 0, displayMax: 100, decimals: 0 },
+  "Number of loans": { displayMin: 0, displayMax: 100, decimals: 0 },
 }
 
 export default function InstanceEditor({ instanceId }) {

@@ -38,8 +38,8 @@ _STATE = {
         "Months since last credit application": {"min": 0, "max": 48},
         "On-time payment rate (%)": {"min": 0, "max": 100},
         "Months since last late payment": {"min": 0, "max": 96},
-        "Trades with unpaid balance (%)": {"min": 0, "max": 100},
-        "Total credit trades": {"min": 0, "max": 100},
+        "Loans not paid off (%)": {"min": 0, "max": 100},
+        "Number of loans": {"min": 0, "max": 100},
     }
 }
 
@@ -55,13 +55,13 @@ def _init_if_needed(test_size=0.2, random_state=42):
         df = df.replace([-9, -8, -7], np.nan)
 
         # Remove rows where non-target feature values are missing
-        feature_cols = [c for c in df.columns if c != "RiskPerformance"]
+        feature_cols = [c for c in df.columns if c != "CreditScore"]
         df = df.dropna(subset=feature_cols, how="any").reset_index(drop=True)
 
-        # Target: RiskPerformance (Good/Bad)
+        # Target: CreditScore (Good/Bad)
         # predicting the risk of being a bad borrower
-        y = df["RiskPerformance"].map({"Good": 0, "Bad": 1}).values
-        X = df.drop(columns=["RiskPerformance"]).copy()
+        y = df["CreditScore"].map({"Good": 0, "Bad": 1}).values
+        X = df.drop(columns=["CreditScore"]).copy()
 
         # Fill remaining missing values with column medians
         # X = X.fillna(X.median())
@@ -70,7 +70,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
         # TODO: rename the features in the dataset and here
-        top_features = ['Credit used (%)', 'Months since last late payment', 'On-time payment rate (%)', 'Total credit trades', 'Trades with unpaid balance (%)', 'Months since last credit application']
+        top_features = ['Credit used (%)', 'Months since last late payment', 'On-time payment rate (%)', 'Number of loans', 'Loans not paid off (%)', 'Months since last credit application']
         
         # Re-scale
         scaler = StandardScaler()
@@ -168,6 +168,15 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
     values = [r["shap_value"] for r in rows_sorted][::-1]
     colors = ["#ef4444" if v >= 0 else "#3b82f6" for v in values]
 
+    # Calculate range padding to prevent outside text from overlapping the y-axis labels
+    min_val = min(values) if values else 0
+    max_val = max(values) if values else 0
+    
+    # Add 25% padding to the min and max values to create space for the outside labels
+    padding = (max_val - min_val) * 0.25 if (max_val - min_val) != 0 else 1
+    x_range = [min_val - padding, max_val + padding]
+    text_labels = [f"{v:+.1f}" for v in values]
+
     fig = go.Figure(
         data=[go.Bar(
             y=features,
@@ -175,13 +184,20 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             orientation="h",
             marker={"color": colors},
             customdata=features,
-            hovertemplate="Factor: %{y}<br>Contribution: %{x:.0f}<extra></extra>",
+            text=text_labels,
+            textfont={"size": 10},
+            textposition="outside",
+            texttemplate="%{text}",
+            cliponaxis=False,
+            hovertemplate="Factor: %{y}<br>Contribution: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
-            title=f"Factors contributing to the applicant's result",
-            xaxis={"title": "Contribution to score"},
-            # yaxis={"title": "Factor"},
-            margin={"l": 140, "r": 20, "t": 55, "b": 40},
+            title=f"Contribution to the applicant's score",
+            xaxis={
+                "showticklabels": False,
+                "range": x_range,
+            },
+            margin={"l": 140, "r": 20, "t": 55, "b": 40}, 
         ),
     )
 
@@ -994,7 +1010,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         }
 
     data = {
-        "dataset_name": "credit risk",
+        "dataset_name": "credit score",
         "train_instances": int(len(X_train)),
         "num_features": int(len(X_train.columns)),
         "features": X_train.columns.tolist(),
