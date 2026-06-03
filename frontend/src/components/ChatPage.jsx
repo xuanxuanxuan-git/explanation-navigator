@@ -5,11 +5,34 @@ import { chatOnce, chatWithToolsStream } from '../api.js'
 import InstanceEditor from './InstanceEditor.jsx'
 import Dashboard from './Dashboard.jsx'
 
-const SUGGESTED_QUESTIONS = [
-  "Why is my risk of default high?",
-  "What can I change to reduce my risk?",
-  "What is the average probability of default?",
+const DESIGN_A_QUESTIONS = [
+  "Why is my score so low?",
+  "What can I do to improve my score?",
+  "What is the average score?",
 ]
+
+const DESIGN_B_CONTENT = {
+  message: "Before we continue, let's test your understanding of the explanation.",
+  question: "Based on the explanation, which feature has the highest impact on your credit score?",
+  options: [
+    "Credit used (%)",
+    "Months since last late payment",
+    "On-time payment rate (%)",
+    "Number of loans"
+  ]
+}
+
+const DESIGN_C_QUESTIONS = {
+  tellsYou: [
+    "What factors lowered my score?",
+    "How much did a factor impact the decision?",
+  ],
+  doesntTellYou: [
+    "What can I do to improve my score to 50?",
+    "Does improving on-time payment rate improve my score?",
+    "Does a factor affect my friend as much as it does on me?"
+  ]
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -22,8 +45,9 @@ export default function ChatPage() {
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
+  const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
   const messagesEndRef = useRef(null)
-  const [userInstanceId] = useState(28)
+  const [userInstanceId] = useState(10)
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -32,14 +56,14 @@ export default function ChatPage() {
 
   const system = useMemo(
     () =>
-      `You are a helpful assistant explaining a machine learning model for credit risk prediction. The user represents applicant ID ${userInstanceId} in the dataset. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model predicts probability of default (credit risk), where higher values indicate higher likelihood of default. 
+      `You are a helpful assistant explaining a machine learning model used as an automated pre-qualification tool for credit line increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit line. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit line increase.
 
       Available features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
       - Months since last late payment -- How long since they last missed a payment
       - On-time payment rate (%) -- How often they've paid on time
-      - Total credit trades -- Number of accounts they've had
-      - Trades with unpaid balance (%) -- How many borrowing accounts still have debt on them
+      - Number of loans -- Number of loan accounts they've had
+      - Loans not paid off (%) -- How many borrowing accounts still have debt on them
       - Months since last credit application -- How long since they last applied for credit
 
       Guidelines:
@@ -131,7 +155,16 @@ export default function ChatPage() {
         }
       
         if (normalVizes.length > 0) {
-          setVisualisations(prev => [...prev, ...normalVizes])
+          setMessages(prev => {
+            const copy = [...prev]
+            const last = copy[copy.length - 1]
+            if (last?.role === "assistant") {
+              last.visualisations = last.visualisations 
+                ? [...last.visualisations, ...normalVizes] 
+                : [...normalVizes]
+            }
+            return copy
+          })
         }
       },
       onDone: payload => {
@@ -159,7 +192,9 @@ export default function ChatPage() {
     messages.filter(m => m.role === "user").length === 0
 
   return (
-    <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12 }}>
+    // We add paddingTop: 50 here permanently so there is always room at the top for the buttons
+    <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12, paddingTop: 30 }}>
+      
       {/* Left side: Instance editor + dashboard */}
       <div
         style={{
@@ -204,9 +239,45 @@ export default function ChatPage() {
           flex: 0.6,
           display: "flex",
           flexDirection: "column",
-          position: "relative",
+          position: "relative", // Ensures absolute children (like the design buttons) anchor to this container
         }}
       >
+        
+        {/* Floating Design Switcher Buttons (Centred to the chat side, floating above) */}
+        {showInitialSuggestions && (
+          <div 
+            style={{ 
+              position: "absolute", 
+              top: -42, // Moves it into the 50px padding we created in the main container above
+              left: "50%", 
+              transform: "translateX(-50%)", 
+              display: "flex", 
+              gap: 8, 
+              zIndex: 20 
+            }}
+          >
+            {["A", "B", "C"].map((design) => (
+              <button
+                key={design}
+                onClick={() => setActiveDesign(design)}
+                style={{
+                  padding: "6px 16px",
+                  borderRadius: 20,
+                  border: "1px solid #cbd5e1",
+                  background: activeDesign === design ? "#2563eb" : "#f8fafc",
+                  color: activeDesign === design ? "white" : "#334155",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  transition: "all 0.2s ease"
+                }}
+              >
+                Design {design}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Chat Container */}
         <div
           style={{
@@ -216,69 +287,115 @@ export default function ChatPage() {
             flex: 1,
             overflow: "auto",
             background: "white",
+            position: "relative",
           }}
         >
           <MessageList messages={messages} busy={busy} status={llmStage} />
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Floating Dialogue Suggestion Box */}
-        {showInitialSuggestions && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 70,
-              right: 20,
-              width: 320,
-              background: "white",
-              borderRadius: 16,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-              border: "1px solid #e5e7eb",
-              padding: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-              animation: "fadeSlide 0.4s ease forwards",
-              zIndex: 10,
-            }}
-          >
+          
+          {/* Centred Floating Dialogue Suggestion Box */}
+          {showInitialSuggestions && (
             <div
               style={{
-                fontWeight: 600,
-                fontSize: 13,
-                color: "#374151",
-                marginBottom: 4,
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "80%",
+                maxWidth: 500,
+                background: "white",
+                borderRadius: 16,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                border: "1px solid #e5e7eb",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                animation: "fadeSlide 0.4s ease forwards",
+                zIndex: 10,
               }}
             >
-              Try asking:
-            </div>
+              {/* DESIGN A */}
+              {activeDesign === "A" && (
+                <>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
+                    You can ask:
+                  </div>
+                  {DESIGN_A_QUESTIONS.map((q, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSend(q)}
+                      className="suggestion-btn"
+                    >
+                      {q}
+                    </div>
+                  ))}
+                </>
+              )}
 
-            {SUGGESTED_QUESTIONS.map((q, idx) => (
-              <div
-                key={idx}
-                onClick={() => handleSend(q)}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  background: "#f3f4f6",
-                  fontSize: 13,
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                }}
-                onMouseEnter={e => {
-                  e.target.style.background = "#2563eb"
-                  e.target.style.color = "white"
-                }}
-                onMouseLeave={e => {
-                  e.target.style.background = "#f3f4f6"
-                  e.target.style.color = "#111"
-                }}
-              >
-                {q}
-              </div>
-            ))}
-          </div>
-        )}
+              {/* DESIGN B */}
+              {activeDesign === "B" && (
+                <>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", textAlign: "center" }}>
+                    {DESIGN_B_CONTENT.message}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 8, textAlign: "center" }}>
+                    {DESIGN_B_CONTENT.question}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {DESIGN_B_CONTENT.options.map((opt, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleSend(`The question is asking: ${DESIGN_B_CONTENT.question}. My answer is: ${opt}. Explain if I am correct or not.`)}
+                        className="suggestion-btn"
+                      >
+                        {opt}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* DESIGN C */}
+              {activeDesign === "C" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  
+                  {/* Category 1: What this tells you */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
+                    This explanation can answer:
+                    </div>
+                    {/* Display Questions Horizontally (Wrapping) */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {DESIGN_C_QUESTIONS.tellsYou.map((q, idx) => (
+                        <div key={idx} onClick={() => handleSend(q)} className="suggestion-btn" style={{ background: "#eff6ff",flex: "1 1 auto" }}>
+                          {q}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                 {/* Category 2: What it doesn't tell you */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14}}>
+                      This explanation cannot answer:
+                    </div>
+                    {/* Display Questions Horizontally (Wrapping) */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {DESIGN_C_QUESTIONS.doesntTellYou.map((q, idx) => (
+                        <div key={idx} onClick={() => handleSend(q)} className="suggestion-btn" style={{  flex: "1 1 auto" }}>
+                          {q}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
 
         {/* Input */}
         <div style={{ marginTop: 10 }}>
@@ -290,12 +407,27 @@ export default function ChatPage() {
           @keyframes fadeSlide {
             from {
               opacity: 0;
-              transform: translateY(15px);
+              transform: translate(-50%, -40%);
             }
             to {
               opacity: 1;
-              transform: translateY(0);
+              transform: translate(-50%, -50%);
             }
+          }
+
+          .suggestion-btn {
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: #f3f4f6;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+          }
+
+          .suggestion-btn:hover {
+            background: #2563eb !important;
+            color: white !important;
           }
         `}
         </style>
