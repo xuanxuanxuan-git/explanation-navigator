@@ -5,7 +5,7 @@ from typing import Optional
 
 # define the tool properties with pydantic
 class ShapBarPlot(BaseModel):
-    instance_id: int = Field(description="Index of the applicant (0-based). Returns local SHAP explanation for this individual's default risk.")
+    instance_id: int = Field(description="Index of the applicant (0-based). Returns local SHAP explanation for this individual's predicted credit score.")
 
 class ShapSummaryPlot(BaseModel):
     source: str = Field(
@@ -18,7 +18,7 @@ class ShapSummaryPlot(BaseModel):
     )
 
 class IndividualPrediction(BaseModel):
-    instance_id: int = Field(description="Index of the applicant (0-based). Returns their features and predicted probability of default.")
+    instance_id: int = Field(description="Index of the applicant (0-based). Returns their features and predicted credit score.")
 
 class AveragePrediction(BaseModel):
     source: str = Field(
@@ -32,7 +32,7 @@ class AveragePrediction(BaseModel):
 
 class CpPlot(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
-    feature: str = Field(description="Feature to vary (e.g. ExternalRiskEstimate, RevolvingUtilizationOfUnsecuredLines, AverageMInFile).")
+    feature: str = Field(description="Feature to vary (e.g. Credit used (%), Months since last late payment, On-time payment rate (%)).")
 
 class Condition(BaseModel):
     op: str = Field(
@@ -53,14 +53,14 @@ class PredictWithFeatureChanges(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
     changes: Dict[str, float] = Field(
         description=(
-            "Map of feature name to new numeric value. Examples: {'ExternalRiskEstimate': 80} if change estimated external risk to 80."
+            "Map of feature name to new numeric value. Examples: {'Number of loans': 80} if changing Number of loans to 80."
         )
     )
 
 class CounterfactualExplanation(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
     target: Optional[float] = Field(
-        description="Desired probability of default."
+        description="Desired credit score (0-100, >50 means approved)."
     )
 
 class SimilarInstances(BaseModel):
@@ -104,7 +104,7 @@ explainer_tools = [
         "type": "function",
         "name": "generate_local_shap_bar_plot",
         "description": "Provides LOCAL feature importance for a SINGLE applicant using SHAP values. "
-        "Use this when the user asks why the model predicted a high or low probability of default for a specific applicant. "
+        "Use this when the user asks why the model predicted a high or low credit score for a specific applicant. "
         "The plot shows how each feature contributed to that instance's prediction. "
         "This explanation applies only to the selected applicant and does NOT represent "
         "feature importance across the dataset.", 
@@ -119,7 +119,7 @@ explainer_tools = [
             Use this when the user asks questions such as:
             - "Which features are most important in the model?"
             - "What features matter most overall?"
-            - "For applicants with more than 12 months in file, which features influence the their predicted risk the most?"
+            - "For applicants with more than 12 months since last late payment, which features influence their predicted credit score the most?"
             
             Do NOT used this tool for questions about a specific instance.", 
         """,
@@ -129,12 +129,12 @@ explainer_tools = [
         "type": "function",
         "name": "get_instance_features_and_prediction",
         "description": (
-            "Returns the feature values and predicted probability of default for a SINGLE applicant. "
+            "Returns the feature values and predicted credit score for a SINGLE applicant. "
             
             "Use this when the user asks about one applicant's data, such as: "
             "- 'what are my feature values?' "
-            "- 'what is my predicted default risk?' "
-            "- 'why is my prediction high/low?' or use it when other tools need to access an applicant's feature values. "
+            "- 'what is my predicted credit score?' "
+            "- 'why is my score high/low?' or use it when other tools need to access an applicant's feature values. "
  
             "This tool is often used together with local explanation tools (e.g., generate_local_shap_bar_plot) to provide complete explanations."
         ),  
@@ -143,17 +143,17 @@ explainer_tools = [
     {
         "type": "function",
         "name": "get_average_prediction",
-        "description": "Compute average predicted probability of default over all test applicants or over a provided list of applicant indices (for example, indices returned by get_subgroup).",
+        "description": "Compute average predicted credit score over all test applicants or over a provided list of applicant indices (for example, indices returned by get_subgroup).",
         "parameters": AveragePrediction.model_json_schema(),
     },
     {
         "type": "function",
         "name": "get_cp_plot",
-        "description": "Generate a Ceteris Paribus (CP) plot for one applicant and one feature. This shows how the applicant's predicted probability of default changes when one feature varies "
+        "description": "Generate a Ceteris Paribus (CP) plot for one applicant and one feature. This shows how the applicant's predicted credit score changes when one feature varies "
         "while all other features are kept fixed at their original values. "
         "Use this tool when the user asks:"
             "- 'How does this feature affect my outcome?'"
-            "- 'What happens if I change AverageMInFile?'"
+            "- 'What happens if I change my Number of loans'"
             "- 'What if this feature was higher or lower?'"
         "Note: This is a local explanation for ONE instance, and only ONE feature is varied at a time. Feature must match a valid dataset feature name exactly.",
         "parameters": CpPlot.model_json_schema(),
@@ -186,19 +186,19 @@ explainer_tools = [
             Multiple filters across features are combined with logical AND.
 
             Examples:
-            "applicants with recent delinquencies"
-            -> {"filters": {"MSinceMostRecentDelq": {"op": "<", "value": 12}}}
+            "applicants with recent late payments"
+            -> {"filters": {"Months since last late payment": {"op": "<", "value": 12}}}
 
-            "applicants with credit score between 67 and 71"
-            -> {"filters": {"ExternalRiskEstimate": [
-                    {"op": ">=", "value": 67},
-                    {"op": "<=", "value": 71}
+            "applicants with on-time payment rate between 80% and 90%"
+            -> {"filters": {"On-time payment rate (%)": [
+                    {"op": ">=", "value": 80},
+                    {"op": "<=", "value": 90}
             ]}}
 
-            "good credit but high predicted risk"
+            "excellent payment history but low predicted score"
             -> {"filters": {
-                    "ExternalRiskEstimate": {"op": ">", "value": 70},
-                    "prediction": {"op": ">", "value": 0.6}
+                    "On-time payment rate (%)": {"op": ">", "value": 95},
+                    "prediction": {"op": "<", "value": 50}
                 }
             }
 
@@ -210,8 +210,8 @@ explainer_tools = [
         "type": "function",
         "name": "predict_with_feature_changes",
         "description": """
-            Alter one or more feature values for a single applicant and return the new predicted probability of default. Use this for what-if analysis such as changing an applicant's credit attributes. 
-            Example for 'change credit score to 70 for instance 2': {'instance_id': 2, 'changes': {'ExternalRiskEstimate': 70}}
+            Alter one or more feature values for a single applicant and return the new predicted credit score. Use this for what-if analysis such as changing an applicant's financial attributes. 
+            Example for 'change on-time payment rate to 95 for instance 2': {'instance_id': 2, 'changes': {'On-time payment rate (%)': 95}}
         """,
         "parameters": PredictWithFeatureChanges.model_json_schema(), 
     },
@@ -267,14 +267,13 @@ explainer_tools = [
         "type": "function",
         "name": "get_counterfactual_explanation",
         "description": (
-            "Generate a counterfactual explanation for a given applicant. A counterfactual explanation provides a set of feature changes that must be applied TOGETHER to move the predicted probability "
-            "of default toward a target value. "
+            "Generate a counterfactual explanation for a given applicant. A counterfactual explanation provides a set of feature changes that must be applied TOGETHER to move the predicted credit score toward a target value. "
             "Note that the returned changes must be implemented simultaneously to reach the target prediction. Individual changes should NOT be interpreted in isolation. "
-            "Only include `target` if the user explicitly specifies a desired probability."
+            "Only include `target` if the user explicitly specifies a desired score."
             "Use this tool when the user asks: "
-            "- 'What should I change to reduce my risk?' -> {'instance_id': }"
-            "- 'How can I reduce the predicted probability to 0.5?' -> {'instance_id': , 'target': 0.5}"
-            "- 'What would make my risk lower?'"
+            "- 'What should I change to increase my score?' -> {'instance_id': }"
+            "- 'How can I increase the predicted score to 60?' -> {'instance_id': , 'target': 60}"
+            "- 'What would make my score higher?'"
         ),
         "parameters": CounterfactualExplanation.model_json_schema(),
     },
@@ -283,50 +282,13 @@ explainer_tools = [
         "name": "get_partial_dependence_plot",
         "description": (
             "Generate a Partial Dependence Plot (PDP) for a feature. "
-            "A PDP shows how the model's average predicted probability of default changes as a feature varies, while averaging over all other features. "
+            "A PDP shows how the model's average predicted credit score changes as a feature varies, while averaging over all other features. "
             "Use this when the user asks about the global effect of a feature, e.g.: "
-            "- 'How does a clean repayment history (PercentTradesNeverDelq) affect the risk?' "
-            "- 'What is the effect of credit history duration (AverageMInFile) overall?' "
+            "- 'How does a clean repayment history (On-time payment rate (%)) affect the score?' "
+            "- 'What is the effect of recent applications (Months since last credit application) overall?' "
             " or use it when explaining the relationship between a feature and prediction globally."
         ),
         "parameters": PartialDependencePlot.model_json_schema(),
     }
 ]
 
-
-        # "description":(         
-        #     "Explains a SINGLE prediction (one instance) using SHAP values. "
-            
-        #     "Use this ONLY when the user refers to a specific instance, such as: "
-        #     "'this prediction', 'my house', 'instance 3', or any single row/example. "
-            
-        #     "This shows how each feature contributed to the prediction for that instance. "
-            
-        #     "Each SHAP value represents how much a feature's value for this instance "
-        #     "pushes the prediction away from the model's baseline (average prediction). "
-            
-        #     "Interpretation rules: "
-        #     "- Positive SHAP pushes prediction higher than baseline. "
-        #     "- Negative SHAP pushes prediction lower than baseline. "
-            
-        #     "IMPORTANT: "
-        #     "- This explanation is LOCAL (only for one instance). "
-        #     "- Do NOT generalise to other instances or the dataset. "
-        #     "- Do NOT describe effects as causal or directional. "
-        #     "- For feature effect trends, use a Ceteris Paribus (CP) plot instead. "
-            
-        #     "DO NOT use this tool for questions about overall feature importance or multiple instances."),
-
-
-
-        #         "description": """
-        #     Provides importance of features on the model's predictions across the entire dataset or a subset (more than one) using SHAP values. 
-        #     This tool aggregates SHAP values across multiple instances to show which features have the largest average impact on predictions. 
-        #     Use this when the user asks questions such as: 
-        #     - "Which features are most important in the model?"
-        #     - "What features matter most overall?"
-        #     - "For houses with more than 5 rooms, which features influence the price the most?"
-        #     Do NOT used this tool for questions about a specific instance.
-        #     Do NOT infer whether increasing a feature increases or decreases predictions. Do NOT describe relationships as positive, negative, or causal. This tool does NOT provide directional effects. "
-        #     For understanding how a feature affects predictions (direction or trend), use a PDP plot instead. 
-        # """,
