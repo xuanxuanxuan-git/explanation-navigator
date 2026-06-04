@@ -429,8 +429,8 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
             "instance_id": instance_id,
             "feature": feature,
             "base_value": base_val,
-            "grid": [round(v, 2) for v in grid.tolist()],
-            "prediction": [int(round(p)) for p in preds],
+            "sampled_values": [round(v, 2) for v in grid.tolist()],
+            "prediction": [round(p, 2) for p in preds],
         },
         "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
@@ -514,8 +514,8 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     return {
         "data": {
             "feature": feature,
-            "grid": [round(v, 2) for v in grid.tolist()],
-            "average_prediction": [int(round(p)) for p in pdp_values.tolist()],
+            "sampled_values": [round(v, 2) for v in grid.tolist()],
+            "prediction": [int(round(p)) for p in pdp_values.tolist()],
         },
         "visualisation": _plotly_payload(
             fig,

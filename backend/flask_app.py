@@ -155,9 +155,9 @@ def _shorten_messages(messages, num_tools):
             continue
 
         if isinstance(payload, dict):
-            payload.pop("grid", None)
+            payload.pop("sampled_values", None)
             payload.pop("prediction", None)
-            payload.pop("average_prediction", None)
+            # payload.pop("average_prediction", None)
 
             msg["content"] = json.dumps(payload)
 
