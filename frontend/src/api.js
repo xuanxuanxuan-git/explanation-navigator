@@ -162,3 +162,14 @@ export async function generateCounterfactualExplanation(
   }
   return res.json()
 }
+
+export async function generateGlobalShapPlot() {
+  const res = await fetch(`${BASE_URL}/api/global/global-shap-plot`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}
