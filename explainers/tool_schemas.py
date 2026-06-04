@@ -60,6 +60,7 @@ class PredictWithFeatureChanges(BaseModel):
 class CounterfactualExplanation(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
     target: Optional[float] = Field(
+        default=None,
         description="Desired credit score (0-100, >50 means approved)."
     )
 
