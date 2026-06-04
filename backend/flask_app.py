@@ -776,7 +776,19 @@ def counterfactual_explanation(instance_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
+@app.get("/api/global/global-shap-plot")
+def global_shap_plot():
+    try:
+        max_display = request.args.get("max_display", default=10, type=int)
+        result = available_tools_mapping["generate_global_subgroup_shap_plot"](
+            source="all",
+            indices=None,
+            max_display=max_display,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    
 # =============================================================================
 # MAIN
 # =============================================================================

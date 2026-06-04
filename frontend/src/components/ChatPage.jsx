@@ -12,13 +12,13 @@ const DESIGN_A_QUESTIONS = [
 ]
 
 const DESIGN_B_CONTENT = {
-  message: "Before we continue, let's test your understanding of the explanation.",
-  question: "Based on the explanation, which feature has the highest impact on your credit score?",
+  message: "Before we continue: ",
+  question: "What do you think this explanation can tell you?",
   options: [
-    "Credit used (%)",
-    "Months since last late payment",
-    "On-time payment rate (%)",
-    "Number of loans"
+    "Which factors affected my result",
+    "How the model behaves overall",
+    "What actions I can take",
+    "Increasing \"loans not paid off\" can improve my score"
   ]
 }
 
@@ -32,6 +32,22 @@ const DESIGN_C_QUESTIONS = {
     "Does improving on-time payment rate improve my score?",
     "Does a factor affect my friend as much as it does on me?"
   ]
+}
+
+// Dictionary to unify explanation labels for both the System Prompt and the UI Prompts
+const EXPLANATION_DICT = {
+  local: {
+    system: "Local Feature Importance (SHAP Bar Plot)",
+    ui: "Local Feature Importance"
+  },
+  counterfactual: {
+    system: "Counterfactual explanation for the current applicant",
+    ui: "Counterfactual Explanation"
+  },
+  global: {
+    system: "Global Feature Importance (System-level SHAP Plot)",
+    ui: "Global Feature Importance"
+  }
 }
 
 export default function ChatPage() {
@@ -49,14 +65,43 @@ export default function ChatPage() {
   const messagesEndRef = useRef(null)
   const [userInstanceId] = useState(10)
 
+  // Track the list of explanations the user wants to see in the dashboard
+  const [selectedExplanations, setSelectedExplanations] = useState([
+    "local",
+  ])
+
+  // Keep a ref of the selected explanations to safely access inside async callbacks
+  const selectedExpsRef = useRef(selectedExplanations)
+  useEffect(() => {
+    selectedExpsRef.current = selectedExplanations
+  }, [selectedExplanations])
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, busy])
 
-  const system = useMemo(
-    () =>
-      `You are a helpful assistant explaining a machine learning model used as an automated pre-qualification tool for credit line increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit line. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit line increase.
+  // Dynamically build the text describing what's visible, reusing the mapping
+  const visibleTexts = useMemo(() => {
+    if (selectedExplanations.length === 0) {
+      return {
+        system: "No explanations currently visible",
+        ui: "no explanations"
+      }
+    }
+    return {
+      system: selectedExplanations.map(k => EXPLANATION_DICT[k].system).join(", "),
+      ui: selectedExplanations.map(k => EXPLANATION_DICT[k].ui).join(" and ")
+    }
+  }, [selectedExplanations])
+
+  // The system prompt dynamically reads the current dashboard state.
+  const system = useMemo(() => {
+    return `You are a helpful assistant explaining a machine learning model used as an automated pre-qualification tool for credit line increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit line. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit line increase.
+
+      Currently, the user has the following explanations visible on their dashboard:
+      [ ${visibleTexts.system} ]
+      If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to these visible panels. Contextualise your answers based on what they can see.
 
       Available features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
@@ -71,9 +116,9 @@ export default function ChatPage() {
       - Do NOT infer or assume missing values
       - Do NOT hallucinate feature values or explanations
       - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them
-      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)`,
-    [userInstanceId],
-  )
+      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)
+      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation that is not currently shown (e.g., they ask about overall model behavior but only local importance is shown, or they ask for actionable changes but counterfactuals are missing), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate and display the correct explanation in your response. Do not just tell them another explanation is needed.`
+  }, [userInstanceId, visibleTexts.system])
 
   async function handleSend(text) {
     if (!text?.trim()) return
@@ -129,39 +174,45 @@ export default function ChatPage() {
       },
       onVisualisations: vizs => {
         if (!vizs?.length) return
-      
-        const counterfactuals = vizs.filter(
-          v =>
-            v?.meta?.tool === "get_counterfactual_explanation" ||
-            v?.visualisation?.meta?.tool ===
-              "get_counterfactual_explanation"
-        )
-      
-        const normalVizes = vizs.filter(v => {
-          const tool =
-            v?.meta?.tool ||
-            v?.visualisation?.meta?.tool
-        
-          return (
-            tool !== "get_counterfactual_explanation" &&
-            tool !== "generate_shap_bar_plot"
-          )
-        })
-      
-        if (counterfactuals.length > 0) {
-          setCounterfactualViz(
-            JSON.parse(JSON.stringify(counterfactuals[0]))
-          )
+
+        const getVizType = (toolName) => {
+          if (toolName === "get_counterfactual_explanation") return "counterfactual"
+          if (toolName === "generate_shap_bar_plot" || toolName === "generate_local_shap_bar_plot") return "local"
+          if (toolName === "generate_shap_summary_plot") return "global"
+          return "extra" // Unrecognized or extra charts
         }
-      
-        if (normalVizes.length > 0) {
+
+        const counterfactuals = []
+        const inlineVizes = []
+
+        vizs.forEach(v => {
+          const tool = v?.meta?.tool || v?.visualisation?.meta?.tool
+          const vizType = getVizType(tool)
+
+          // Extract counterfactual explicitly in case the dashboard needs to parse its target
+          if (vizType === "counterfactual") {
+            counterfactuals.push(v)
+          }
+
+          // If the explanation is NOT currently selected in the dashboard checklist, 
+          // or it's an "extra" figure, display it inline in the chat message
+          if (!selectedExpsRef.current.includes(vizType) || vizType === "extra") {
+            inlineVizes.push(v)
+          }
+        })
+
+        if (counterfactuals.length > 0) {
+          setCounterfactualViz(JSON.parse(JSON.stringify(counterfactuals[0])))
+        }
+
+        if (inlineVizes.length > 0) {
           setMessages(prev => {
             const copy = [...prev]
             const last = copy[copy.length - 1]
             if (last?.role === "assistant") {
-              last.visualisations = last.visualisations 
-                ? [...last.visualisations, ...normalVizes] 
-                : [...normalVizes]
+              last.visualisations = last.visualisations
+                ? [...last.visualisations, ...inlineVizes]
+                : [...inlineVizes]
             }
             return copy
           })
@@ -191,11 +242,16 @@ export default function ChatPage() {
     !busy &&
     messages.filter(m => m.role === "user").length === 0
 
+  const handleToggleExplanation = (key) => {
+    setSelectedExplanations(prev =>
+      prev.includes(key) ? prev.filter(v => v !== key) : [...prev, key]
+    )
+  }
+
   return (
-    // We add paddingTop: 50 here permanently so there is always room at the top for the buttons
     <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12, paddingTop: 30 }}>
-      
-      {/* Left side: Instance editor + dashboard */}
+
+      {/* Left side: Instance editor, Checklist, Dashboard */}
       <div
         style={{
           flex: 0.4,
@@ -204,6 +260,7 @@ export default function ChatPage() {
           gap: 8,
         }}
       >
+        {/* Instance Editor */}
         <div
           style={{
             border: "1px solid #ddd",
@@ -215,6 +272,47 @@ export default function ChatPage() {
           <InstanceEditor instanceId={userInstanceId} />
         </div>
 
+        {/* Explanations Selection Panel */}
+        <div
+          style={{
+            border: "1px solid #ddd",
+            borderRadius: 8,
+            background: "#fafafa",
+            padding: "12px 16px",
+          }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 13, color: "#475569", marginBottom: 8 }}>
+            Explanations to display (for focus group activities)
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={selectedExplanations.includes("local")}
+                onChange={() => handleToggleExplanation("local")}
+              />
+              Local Feature Importance
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={selectedExplanations.includes("counterfactual")}
+                onChange={() => handleToggleExplanation("counterfactual")}
+              />
+              Counterfactual Explanation
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={selectedExplanations.includes("global")}
+                onChange={() => handleToggleExplanation("global")}
+              />
+              Global Feature Importance
+            </label>
+          </div>
+        </div>
+
+        {/* Dashboard */}
         <div
           style={{
             border: "1px solid #ddd",
@@ -229,6 +327,7 @@ export default function ChatPage() {
             instanceId={userInstanceId}
             visualisations={visualisations}
             counterfactualViz={counterfactualViz}
+            selectedExplanations={selectedExplanations}
           />
         </div>
       </div>
@@ -239,21 +338,21 @@ export default function ChatPage() {
           flex: 0.6,
           display: "flex",
           flexDirection: "column",
-          position: "relative", // Ensures absolute children (like the design buttons) anchor to this container
+          position: "relative",
         }}
       >
-        
-        {/* Floating Design Switcher Buttons (Centred to the chat side, floating above) */}
+
+        {/* Floating Design Switcher Buttons */}
         {showInitialSuggestions && (
-          <div 
-            style={{ 
-              position: "absolute", 
-              top: -42, // Moves it into the 50px padding we created in the main container above
-              left: "50%", 
-              transform: "translateX(-50%)", 
-              display: "flex", 
-              gap: 8, 
-              zIndex: 20 
+          <div
+            style={{
+              position: "absolute",
+              top: -42,
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex",
+              gap: 8,
+              zIndex: 20
             }}
           >
             {["A", "B", "C"].map((design) => (
@@ -291,7 +390,7 @@ export default function ChatPage() {
           }}
         >
           <MessageList messages={messages} busy={busy} status={llmStage} />
-          
+
           {/* Centred Floating Dialogue Suggestion Box */}
           {showInitialSuggestions && (
             <div
@@ -345,7 +444,10 @@ export default function ChatPage() {
                     {DESIGN_B_CONTENT.options.map((opt, idx) => (
                       <div
                         key={idx}
-                        onClick={() => handleSend(`The question is asking: ${DESIGN_B_CONTENT.question}. My answer is: ${opt}. Explain if I am correct or not.`)}
+                        onClick={() => {
+                          let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${DESIGN_B_CONTENT.question}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                          handleSend(promptText);
+                        }}
                         className="suggestion-btn"
                       >
                         {opt}
@@ -358,37 +460,55 @@ export default function ChatPage() {
               {/* DESIGN C */}
               {activeDesign === "C" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                  
+
                   {/* Category 1: What this tells you */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
-                    This explanation can answer:
+                      This explanation can answer:
                     </div>
                     {/* Display Questions Horizontally (Wrapping) */}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {DESIGN_C_QUESTIONS.tellsYou.map((q, idx) => (
-                        <div key={idx} onClick={() => handleSend(q)} className="suggestion-btn" style={{ background: "#eff6ff",flex: "1 1 auto" }}>
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question.`;
+                            handleSend(promptText);
+                          }}
+                          className="suggestion-btn"
+                          style={{ background: "#eff6ff", flex: "1 1 auto" }}
+                        >
                           {q}
                         </div>
                       ))}
                     </div>
                   </div>
 
-                 {/* Category 2: What it doesn't tell you */}
+                  {/* Category 2: What it doesn't tell you */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14}}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
                       This explanation cannot answer:
                     </div>
                     {/* Display Questions Horizontally (Wrapping) */}
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {DESIGN_C_QUESTIONS.doesntTellYou.map((q, idx) => (
-                        <div key={idx} onClick={() => handleSend(q)} className="suggestion-btn" style={{  flex: "1 1 auto" }}>
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`;
+                            handleSend(promptText);
+                          }}
+                          className="suggestion-btn"
+                          style={{ flex: "1 1 auto" }}
+                        >
                           {q}
                         </div>
                       ))}
                     </div>
                   </div>
-
+                  <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
+                    Click on a question to find out the explanation.
+                  </div>
                 </div>
               )}
             </div>

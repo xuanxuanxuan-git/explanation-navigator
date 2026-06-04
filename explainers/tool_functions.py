@@ -101,7 +101,6 @@ def _init_if_needed(test_size=0.2, random_state=42):
             "X_test_scaled": np.array(X_test_scaled),
             "explainer": explainer,
             "shap_values": np.array(shap_values),
-            # "expected_value": float(expected_value),
             "ready": True,
         })
 
@@ -225,6 +224,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
         shap_subset = shap_values
 
     elif source == "indices":
+        # TODO: fix -- for now it can only show instances with indices < 100
         if not isinstance(indices, list) or len(indices) == 0:
             return {"data": "indices must be a non-empty list when source='indices'.", "visualisation": None}
 
@@ -550,12 +550,14 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
 
     original_pred = float(model.predict_proba(scaler.transform(x0))[0][0]) * 100
 
-    # Default target: decrease the probability by 20%
-    # TODO: fix
+    # Default target 
+    default_target = False
     if target is None:
-        return {
-            "error": "Target probability is required. Please specify a desired probability."
-        }
+        target=50
+        default_target = True
+        # return {
+        #     "error": "Target score is required. Please specify a desired score."
+        # }
 
     feature_names = X_test.columns.tolist()
 
@@ -747,6 +749,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             "target": target,
             "num_features_changed": len(changes),
             "changes": changes,
+            "system_reminder": "The user did not specify a target score. You MUST explicitly inform the user that a default target of 50 was assumed." if default_target else None
         },
         "visualisation": _plotly_payload(
             fig,

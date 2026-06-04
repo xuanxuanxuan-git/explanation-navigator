@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import Plot from "react-plotly.js"
-import { generateShapBarPlot, generateCounterfactualExplanation } from "../api.js"
+import {
+  generateShapBarPlot,
+  generateCounterfactualExplanation,
+  generateGlobalShapPlot
+} from "../api.js"
 
 /* ---------- HELPERS ---------- */
 
@@ -42,7 +46,16 @@ function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
 
 /* ---------- MAIN COMPONENT ---------- */
 
-export default function Dashboard({ instanceId, visualisations = [], counterfactualViz, }) {
+export default function Dashboard({
+  instanceId,
+  visualisations = [],
+  counterfactualViz,
+  selectedExplanations = []
+}) {
+  const showLocal = selectedExplanations.includes("local");
+  const showCF = selectedExplanations.includes("counterfactual");
+  const showGlobal = selectedExplanations.includes("global");
+
   /* SHAP state */
   const [shapViz, setShapViz] = useState(null)
   const [shapLoading, setShapLoading] = useState(false)
@@ -52,57 +65,98 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
   const [cfViz, setCfViz] = useState(null)
   const [cfLoading, setCfLoading] = useState(false)
   const [cfError, setCfError] = useState("")
-  const [target, setTarget] = useState(50) // default target for counterfactual explanation (editable)
+  const [target, setTarget] = useState(50)
   const [cfUpdating, setCfUpdating] = useState(false)
+
+  /* Global state */
+  const [globalViz, setGlobalViz] = useState(null)
+  const [globalLoading, setGlobalLoading] = useState(false)
+  const [globalError, setGlobalError] = useState("")
 
   /* Extra figures carousel state */
   const [vizIndex, setVizIndex] = useState(0)
   const prevExtraCountRef = useRef(0)
 
+  /* ---------- LOAD GLOBAL ---------- */
+  useEffect(() => {
+    if (!showGlobal) return
+    let cancelled = false;
+
+    async function loadGlobal() {
+      setGlobalLoading(true)
+      setGlobalError("")
+      try {
+        const res = await generateGlobalShapPlot()
+        if (cancelled) return
+        const norm = normaliseVisualisation(res, `Global Feature Importance`)
+        setGlobalViz(norm)
+      } catch (e) {
+        if (cancelled) return
+        setGlobalError(e.message || "Failed to load Global visualisation")
+        setGlobalViz(null)
+      } finally {
+        if (!cancelled) setGlobalLoading(false)
+      }
+    }
+
+    if (!globalViz && !globalLoading) {
+      loadGlobal()
+    }
+
+    return () => { cancelled = true }
+  }, [showGlobal, globalViz])
+
+
   /* ---------- LOAD SHAP PLOT ---------- */
   useEffect(() => {
+    if (!showLocal) return
+
+    let cancelled = false;
     async function loadShap() {
       setShapLoading(true)
       setShapError("")
       try {
         const res = await generateShapBarPlot(instanceId)
+        if (cancelled) return
         const norm = normaliseVisualisation(
           res,
           `Local feature attribution for applicant ${instanceId}`,
         )
         setShapViz(norm)
       } catch (e) {
+        if (cancelled) return
         setShapError(e.message || "Failed to load SHAP visualisation")
         setShapViz(null)
       } finally {
-        setShapLoading(false)
+        if (!cancelled) setShapLoading(false)
       }
     }
 
     loadShap()
-  }, [instanceId])
+    return () => { cancelled = true }
+  }, [instanceId, showLocal])
 
   /* ---------- LOAD COUNTERFACTUAL ---------- */
   useEffect(() => {
     if (!counterfactualViz) return
-  
+
     const norm = normaliseVisualisation(
       counterfactualViz,
       `Counterfactual explanation for applicant ${instanceId}`
     )
-  
+
     setCfViz(norm)
     setCfLoading(false)
     setCfError("")
-  
+
     const t =
       counterfactualViz?.meta?.target ??
       counterfactualViz?.target ??
       counterfactualViz?.data?.target ??
       counterfactualViz?.visualisation?.meta?.target
-  
+
     const parsed = Number(t)
-  
+
     if (!Number.isNaN(parsed)) {
       setTarget(parsed)
     }
@@ -143,8 +197,9 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
   }
 
   useEffect(() => {
+    if (!showCF) return
     loadCounterfactual()
-  }, [instanceId])
+  }, [instanceId, showCF])
 
   const handleTargetChange = e => {
     const newTarget = e.target.value === "" ? "" : parseFloat(e.target.value)
@@ -201,6 +256,15 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
 
   /* ---------- RENDER ---------- */
 
+  // Provide an empty state if no explanations are selected
+  if (!showLocal && !showCF && !showGlobal && !hasExtra) {
+    return (
+      <div style={{ padding: 20, color: "#6b7280", textAlign: "center", fontSize: 13 }}>
+        No explanations selected. Please check options on the left.
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -213,199 +277,164 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
         overflowY: "auto",
       }}
     >
-      {/* ===== SHAP SECTION ===== */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
 
-        {shapLoading && !shapViz && (
-          <div style={{ fontSize: 12, color: "#6b7280" }}>
-            Loading SHAP explanation
-          </div>
-        )}
 
-        {shapError && (
-          <div
-            style={{
-              padding: 8,
-              borderRadius: 8,
-              background: "#fee2e2",
-              color: "#991b1b",
-              fontSize: 12,
-            }}
-          >
-            {shapError}
-          </div>
-        )}
+      {/* ===== SHAP SECTION (Local) ===== */}
+      {showLocal && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {shapLoading && !shapViz && (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              Loading Local SHAP explanation
+            </div>
+          )}
 
-        {shapViz?.type === "plotly" && (
-          <div
-            style={{
-              borderRadius: 10,
-              overflow: "hidden",
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-            }}
-          >
-            <Plot
-              data={shapViz.figure?.data || []}
-              layout={{
-                autosize: true,
-                height: 260,
-                margin: { l: 140, r: 20, t: 55, b: 40 },
-                ...(shapViz.figure?.layout || {}),
-              }}
-              config={{
-                responsive: true,
-                displaylogo: false,
-                ...(shapViz.config || {}),
-              }}
-              style={{ width: "100%", height: 260 }}
-              useResizeHandler
-            />
-          </div>
-        )}
-      </div>
+          {shapError && (
+            <div style={{ padding: 8, borderRadius: 8, background: "#fee2e2", color: "#991b1b", fontSize: 12 }}>
+              {shapError}
+            </div>
+          )}
+
+          {shapViz?.type === "plotly" && (
+            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+              <Plot
+                data={shapViz.figure?.data || []}
+                layout={{
+                  autosize: true,
+                  height: 260,
+                  margin: { l: 140, r: 20, t: 55, b: 40 },
+                  ...(shapViz.figure?.layout || {}),
+                }}
+                config={{
+                  responsive: true,
+                  displaylogo: false,
+                  ...(shapViz.config || {}),
+                }}
+                style={{ width: "100%", height: 260 }}
+                useResizeHandler
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ===== COUNTERFACTUAL SECTION ===== */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            background: "#fff",
-            overflow: "hidden",
-          }}
-        >
-          {/* Target input bar */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "12px 16px",
-              background: "#f8fafc",
-              borderBottom: "1px solid #e5e7eb",
-            }}
-          >
-            <label style={{ fontSize: 12, color: "#64748b", minWidth: 50 }}>
-              Target:
-            </label>
-            <input
-              type="number"
-              step="1"
-              min="0"
-              max="100"
-              value={target}
-              onChange={handleTargetChange}
-              style={{
-                flex: 1,
-                padding: "6px 8px",
-                border: "1px solid #cbd5e1",
-                borderRadius: 6,
-                fontSize: 13,
-              }}
-            />
-            <button
-              onClick={handleUpdateTarget}
-              disabled={cfUpdating}
-              style={{
-                padding: "6px 16px",
-                borderRadius: 6,
-                border: "1px solid #3b82f6",
-                background: "#3b82f6",
-                color: "white",
-                fontSize: 12,
-                fontWeight: 500,
-                cursor: cfUpdating ? "default" : "pointer",
-                opacity: cfUpdating ? 0.7 : 1,
-              }}
-            >
-              {cfUpdating ? "Updating..." : "Update"}
-            </button>
-          </div>
-
-          {/* Plot below target input */}
-          <div style={{ padding: "12px 0px" }}>
-            {cfLoading && !cfViz && (
-              <div style={{ fontSize: 12, color: "#6b7280" }}>
-                Loading counterfactual
-              </div>
-            )}
-
-            {cfError && (
-              <div
+      {showCF && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff", overflow: "hidden" }}>
+            {/* Target input bar */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
+              <label style={{ fontSize: 12, color: "#64748b", minWidth: 50 }}>
+                Target:
+              </label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                value={target}
+                onChange={handleTargetChange}
+                style={{ flex: 1, padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 13 }}
+              />
+              <button
+                onClick={handleUpdateTarget}
+                disabled={cfUpdating}
                 style={{
-                  padding: 8,
-                  borderRadius: 8,
-                  background: "#fee2e2",
-                  color: "#991b1b",
+                  padding: "6px 16px",
+                  borderRadius: 6,
+                  border: "1px solid #3b82f6",
+                  background: "#3b82f6",
+                  color: "white",
                   fontSize: 12,
+                  fontWeight: 500,
+                  cursor: cfUpdating ? "default" : "pointer",
+                  opacity: cfUpdating ? 0.7 : 1,
                 }}
               >
-                {cfError}
-              </div>
-            )}
+                {cfUpdating ? "Updating..." : "Update"}
+              </button>
+            </div>
 
-            {cfViz?.type === "plotly" && (
-              <div
-                style={{
-                  // borderRadius: 8,
-                  overflow: "hidden",
-                  // border: "1px solid #e5e7eb",
-                  background: "#fff",
-                }}
-              >
-                <Plot
-                  data={cfViz.figure?.data || []}
-                  layout={{
-                    autosize: true,
-                    height: 300,
-                    // margin: { l: 60, r: 30, t: 50, b: 50 },
-                    ...(cfViz.figure?.layout || {}),
-                  }}
-                  config={{
-                    responsive: true,
-                    displaylogo: false,
-                    ...(cfViz.config || {}),
-                  }}
-                  style={{ width: "100%", height: "100%" }}
-                  useResizeHandler
-                />
-              </div>
-            )}
+            {/* Plot below target input */}
+            <div style={{ padding: "12px 0px" }}>
+              {cfLoading && !cfViz && (
+                <div style={{ fontSize: 12, color: "#6b7280" }}>
+                  Loading counterfactual
+                </div>
+              )}
+
+              {cfError && (
+                <div style={{ padding: 8, borderRadius: 8, background: "#fee2e2", color: "#991b1b", fontSize: 12 }}>
+                  {cfError}
+                </div>
+              )}
+
+              {cfViz?.type === "plotly" && (
+                <div style={{ overflow: "hidden", background: "#fff" }}>
+                  <Plot
+                    data={cfViz.figure?.data || []}
+                    layout={{
+                      autosize: true,
+                      height: 300,
+                      ...(cfViz.figure?.layout || {}),
+                    }}
+                    config={{
+                      responsive: true,
+                      displaylogo: false,
+                      ...(cfViz.config || {}),
+                    }}
+                    style={{ width: "100%", height: "100%" }}
+                    useResizeHandler
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ===== GLOBAL SECTION ===== */}
+      {showGlobal && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {globalLoading && !globalViz && (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              Loading Global explanation
+            </div>
+          )}
+
+          {globalError && (
+            <div style={{ padding: 8, borderRadius: 8, background: "#fee2e2", color: "#991b1b", fontSize: 12 }}>
+              {globalError}
+            </div>
+          )}
+
+          {globalViz?.type === "plotly" && (
+            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+              <Plot
+                data={globalViz.figure?.data || []}
+                layout={{
+                  autosize: true,
+                  height: 260,
+                  margin: { l: 140, r: 20, t: 55, b: 40 },
+                  ...(globalViz.figure?.layout || {}),
+                }}
+                config={{
+                  responsive: true,
+                  displaylogo: false,
+                  ...(globalViz.config || {}),
+                }}
+                style={{ width: "100%", height: 260 }}
+                useResizeHandler
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ===== EXTRA FIGURES CAROUSEL ===== */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {hasExtra && currentExtra?.type === "plotly" && (
           <>
-            <div
-              style={{
-                borderRadius: 12,
-                overflow: "hidden",
-                border: "1px solid #e5e7eb",
-                background: "white",
-              }}
-            >
+            <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb", background: "white" }}>
               <Plot
                 data={currentExtra.figure?.data || []}
                 layout={{
@@ -425,46 +454,20 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
             </div>
 
             {extraFigures.length > 1 && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 12,
-                }}
-              >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
                 <button
                   onClick={prevViz}
                   disabled={vizIndex === 0}
                   aria-label="Previous"
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "#f3f4f6",
-                    cursor:
-                      vizIndex === 0 ? "default" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: 36, height: 36, borderRadius: "50%", border: "none",
+                    background: "#f3f4f6", cursor: vizIndex === 0 ? "default" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
                     opacity: vizIndex === 0 ? 0.3 : 1,
                   }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="#111827"
-                    strokeWidth={3}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 18l-6-6 6-6"
-                    />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#111827" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 18l-6-6 6-6" />
                   </svg>
                 </button>
 
@@ -475,16 +478,8 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
                       onClick={() => setVizIndex(i)}
                       aria-label={`Go to ${i + 1}`}
                       style={{
-                        width: 8,
-                        height: 8,
-                        padding: 0,
-                        borderRadius: "50%",
-                        border: "none",
-                        background:
-                          i === vizIndex
-                            ? "#111827"
-                            : "#d1d5db",
-                        cursor: "pointer",
+                        width: 8, height: 8, padding: 0, borderRadius: "50%", border: "none",
+                        background: i === vizIndex ? "#111827" : "#d1d5db", cursor: "pointer",
                       }}
                     />
                   ))}
@@ -495,38 +490,14 @@ export default function Dashboard({ instanceId, visualisations = [], counterfact
                   disabled={vizIndex === extraFigures.length - 1}
                   aria-label="Next"
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "#f3f4f6",
-                    cursor:
-                      vizIndex === extraFigures.length - 1
-                        ? "default"
-                        : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    opacity:
-                      vizIndex === extraFigures.length - 1
-                        ? 0.3
-                        : 1,
+                    width: 36, height: 36, borderRadius: "50%", border: "none",
+                    background: "#f3f4f6", cursor: vizIndex === extraFigures.length - 1 ? "default" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: vizIndex === extraFigures.length - 1 ? 0.3 : 1,
                   }}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="#111827"
-                    strokeWidth={3}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 6l6 6-6 6"
-                    />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#111827" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
                   </svg>
                 </button>
               </div>
