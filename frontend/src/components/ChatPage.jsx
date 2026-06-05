@@ -82,6 +82,14 @@ export default function ChatPage() {
     selectedExpsRef.current = selectedExplanations
   }, [selectedExplanations])
 
+  // Start a new log session on initial page load / refresh
+  useEffect(() => {
+    fetch("http://127.0.0.1:5001/api/session/reset")
+      .then(res => res.json())
+      .then(data => console.log("Initial session started:", data.log_file))
+      .catch(err => console.error("Error starting session:", err));
+  }, []);
+
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })

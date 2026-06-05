@@ -2,6 +2,8 @@ import os
 import json
 import time
 import logging
+import uuid
+from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
@@ -46,53 +48,50 @@ CORS(app, origins=ALLOWED_ORIGINS)
 # LOGGING SETUP - Using app.logger
 # ============================================================================
 
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colors for different log levels"""
-    
-    COLORS = {
-        'DEBUG': '\033[36m',      # Cyan
-        'INFO': '\033[32m',       # Green
-        'WARNING': '\033[33m',    # Yellow
-        'ERROR': '\033[31m',      # Red
-        'CRITICAL': '\033[35m',   # Magenta
-        'RESET': '\033[0m'        # Reset
-    }
-    
-    def format(self, record):
-        if record.levelname in self.COLORS:
-            color = self.COLORS[record.levelname]
-            reset = self.COLORS['RESET']
-            record.levelname = f"{color}{record.levelname}{reset}"
-        return super().format(record)
-
-
-# Configure app.logger
 app.logger.setLevel(logging.DEBUG)
-
-# Remove default handler
 app.logger.handlers.clear()
 
-# Make backend/logs/app.log relative to backend/app.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)  # ensure directory exists
-log_path = os.path.join(LOG_DIR, "app.log")
+os.makedirs(LOG_DIR, exist_ok=True)
 
-# File handler (writes to app.log)
-file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter(
-    fmt='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-file_handler.setFormatter(file_formatter)
-app.logger.addHandler(file_handler)
+def setup_app_logger(session_id=None):
+    """
+    Sets up a new file handler for the logger based on date, time, and session ID.
+    Removes any previously attached file handlers to start fresh.
+    """
+    if not session_id:
+        session_id = str(uuid.uuid4())[:8]
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"log_{timestamp}_{session_id}.log"
+    log_path = os.path.join(LOG_DIR, log_filename)
+
+    # Remove existing file handlers so we don't log to old files
+    for handler in app.logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            app.logger.removeHandler(handler)
+            handler.close()
+
+    # Create new file handler
+    file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        fmt='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+    
+    app.logger.addHandler(file_handler)
+    app.logger.info(f"Started new log session: {log_filename}")
+    
+    return log_filename, session_id
+
+# setup_app_logger()
 
 # ============================================================================
 # Endpoints support functions 
 # ============================================================================
-
 
 def _normalise_messages(messages):
     """
@@ -157,7 +156,6 @@ def _shorten_messages(messages, num_tools):
         if isinstance(payload, dict):
             payload.pop("sampled_values", None)
             payload.pop("prediction", None)
-            # payload.pop("average_prediction", None)
 
             msg["content"] = json.dumps(payload)
 
@@ -224,7 +222,7 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
         if field not in arguments or arguments[field] is None:
             field_description = properties.get(field, {}).get("description", "")
             missing_fields.append({"name": field, "description": field_description})
-            # app.logger.info(field_description)
+
     # TODO: also check if the parameter type is correct
     is_valid = len(missing_fields) == 0
 
@@ -522,6 +520,20 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
 def health():
     return jsonify({"ok": True, "time": int(time.time()), "provider": LLM_PROVIDER})
 
+@app.get("/api/session/reset")
+def reset_session():
+    """
+    Generates a new session log file. Call this endpoint when the web frontend 
+    is refreshed or a new user session begins.
+    """
+    log_filename, session_id = setup_app_logger()
+    return jsonify({
+        "ok": True, 
+        "session_id": session_id, 
+        "log_file": log_filename,
+        "message": "New log session started successfully."
+    })
+
 @app.post("/api/chat")
 def chat_non_stream():
     """
@@ -794,8 +806,8 @@ def global_shap_plot():
 # =============================================================================
 
 if __name__ == "__main__":
-    app.logger.info("Starting Chatbot")
-    app.logger.info(f"Host: {FLASK_HOST}, Port: {FLASK_PORT}")
-    app.logger.info(f"LLM Provider: {LLM_PROVIDER}")
+    print("Starting Chatbot")
+    print(f"Host: {FLASK_HOST}, Port: {FLASK_PORT}")
+    print(f"LLM Provider: {LLM_PROVIDER}")
     
     app.run(host=FLASK_HOST, port=FLASK_PORT, debug=True)
