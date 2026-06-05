@@ -5,15 +5,18 @@ import { chatOnce, chatWithToolsStream } from '../api.js'
 import InstanceEditor from './InstanceEditor.jsx'
 import Dashboard from './Dashboard.jsx'
 
+// Which question would you like this explanation to help answer?
+// Loop: what else would you like to know?
 const DESIGN_A_QUESTIONS = [
   "Why is my score so low?",
   "What can I do to improve my score?",
   "What is the average score?",
 ]
 
+// Loop: what else do you think the original explanation can answer?
 const DESIGN_B_CONTENT = {
   message: "Before we continue: ",
-  question: "What do you think this explanation can tell you?",
+  question: "What do you think this explanation can tell you?", // Select a question you think it can answer.
   options: [
     "Which factors affected my result",
     "How the model behaves overall",
@@ -22,6 +25,9 @@ const DESIGN_B_CONTENT = {
   ]
 }
 
+// What would you like to explore next?
+// The explanation can also answer:
+// Questions requiring other explanations:
 const DESIGN_C_QUESTIONS = {
   tellsYou: [
     "What factors lowered my score?",
@@ -417,7 +423,7 @@ export default function ChatPage() {
               {activeDesign === "A" && (
                 <>
                   <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
-                    You can ask:
+                    Which question would you like this explanation to help answer?
                   </div>
                   {DESIGN_A_QUESTIONS.map((q, idx) => (
                     <div
@@ -507,7 +513,7 @@ export default function ChatPage() {
                     </div>
                   </div>
                   <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
-                    Click on a question to find out the explanation.
+                    Choose one to explore more.
                   </div>
                 </div>
               )}
