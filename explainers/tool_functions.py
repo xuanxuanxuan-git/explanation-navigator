@@ -68,7 +68,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=test_size, random_state=random_state, stratify=y
         )
-        # TODO: rename the features in the dataset and here
+
         top_features = ['Credit used (%)', 'Months since last late payment', 'On-time payment rate (%)', 'Number of loans', 'Loans not paid off (%)', 'Months since last credit application']
         
         # Re-scale
@@ -89,7 +89,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
 
         background = shap.sample(X_train_scaled, 100, random_state=42)
         explainer = shap.KernelExplainer(model.predict_proba, background)
-        shap_values = explainer.shap_values(X_test_scaled[:100])[:, :, 0]*100
+        shap_values = explainer.shap_values(X_test_scaled[:100], l1_reg=False)[:, :, 0]*100
 
         _STATE.update({
             "X_train": X_train.reset_index(drop=True),
