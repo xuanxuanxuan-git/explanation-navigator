@@ -105,12 +105,20 @@ def _init_if_needed(test_size=0.2, random_state=42):
         })
 
 
-def _plotly_payload(fig, *, display_mode_bar=False, meta=None):
+def _plotly_payload(fig, *, config=None, meta=None):
     fig_json = json.loads(pio.to_json(fig))
+    default_config = {
+        "displayModeBar": True,              # Show the bar
+        "modeBarButtons": [["toImage"]],     # ONLY show the save image button
+        "displaylogo": False                 # Hide the Plotly logo
+    }
+
+    if config:
+        default_config.update(config)
     return {
         "type": "plotly",
         "figure": fig_json,
-        "config": {"displayModeBar": display_mode_bar, "responsive": True},
+        "config": default_config,
         "meta": meta or {},
     }
 
@@ -164,7 +172,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
     # For horizontal bars: feature names on Y, SHAP values on X
     features = [r["feature"] for r in rows_sorted][::-1]
     values = [r["shap_value"] for r in rows_sorted][::-1]
-    colors = ["#ef4444" if v >= 0 else "#3b82f6" for v in values]
+    colors = ["#ef4444" if v <= 0 else "#3b82f6" for v in values]
 
     # Calculate range padding to prevent outside text from overlapping the y-axis labels
     min_val = min(values) if values else 0
@@ -274,7 +282,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             "count": int(len(X)),
             "features": rows_sorted,
         },
-        "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "generate_shap_summary_plot"}),
+        "visualisation": _plotly_payload(fig, meta={"tool": "generate_shap_summary_plot"}),
     }
 
 
@@ -365,7 +373,7 @@ def get_average_prediction(source: str = "all", indices=None):
     }
 
 # Change in credit score
-def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
+def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     _init_if_needed()
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
@@ -432,7 +440,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 150):
             "sampled_values": [round(v, 2) for v in grid.tolist()],
             "prediction": [round(p, 2) for p in preds],
         },
-        "visualisation": _plotly_payload(fig, display_mode_bar=False, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
+        "visualisation": _plotly_payload(fig, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
 
 def get_partial_dependence_plot(feature: str, grid_points: int = 150):
@@ -519,7 +527,6 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
         },
         "visualisation": _plotly_payload(
             fig,
-            display_mode_bar=False,
             meta={
                 "tool": "get_partial_dependence_plot",
                 "feature": feature,
@@ -753,7 +760,6 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         },
         "visualisation": _plotly_payload(
             fig,
-            display_mode_bar=False,
             meta={
                 "tool": "get_counterfactual_explanation",
                 "instance_id": instance_id,
@@ -1097,7 +1103,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
 
         visualisation = _plotly_payload(
             fig,
-            display_mode_bar=False,
             meta={
                 "tool": "dataset_meta",
                 "feature": feature,

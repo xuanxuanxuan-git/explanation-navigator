@@ -427,7 +427,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
         
         # Check for tool calls
         tool_calls = assistant_msg.get("tool_calls") or []
-        app.logger.info(f"Tool call result is: {tool_calls}")
+        app.logger.info(f"Tools called: {tool_calls}")
         if not tool_calls:
             # Add assistant response to tool_reply, and return
             tool_reply.append({
@@ -493,6 +493,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                 tool_reply.append(shorten_tool_msg)
             else:
                 tool_reply.append(tool_msg)
+            app.logger.info(f"Tool implementation result is: {tool_msg}")
             local_messages.append(tool_msg)
             
             if not success:
@@ -662,7 +663,7 @@ def chat_with_tools_stream():
             for chunk, done in llm_client.stream(
                 messages=messages_with_tools,
                 model=payload_model,
-                options=data.get("options") or {"temperature": 0.2},
+                options=data.get("options") or {"temperature": 0.1},
             ):
                 assistant_text += chunk
                 yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"

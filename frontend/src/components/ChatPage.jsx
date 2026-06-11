@@ -69,7 +69,10 @@ export default function ChatPage() {
   const [llmStage, setLlmStage] = useState("thinking")
   const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
   const messagesEndRef = useRef(null)
-  const [userInstanceId] = useState(10)
+  const [userInstanceId] = useState(52)
+
+  // Track which Design C questions have been clicked
+  const [clickedQuestions, setClickedQuestions] = useState(new Set())
 
   // Track the list of explanations the user wants to see in the dashboard
   const [selectedExplanations, setSelectedExplanations] = useState([
@@ -131,7 +134,7 @@ export default function ChatPage() {
       - Do NOT hallucinate feature values or explanations
       - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them
       - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)
-      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation that is not currently shown (e.g., they ask about overall model behavior but only local importance is shown, or they ask for actionable changes but counterfactuals are missing), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate and display the correct explanation in your response. Do not just tell them another explanation is needed.`
+      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation(s) that is not currently shown (e.g., they ask about overall model behavior but only local importance is shown, or they ask for actionable changes but counterfactuals are missing), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate and display the correct explanation in your response. Do not just tell them another explanation is needed.`
   }, [userInstanceId, visibleTexts.system])
 
   async function handleSend(text) {
@@ -193,7 +196,7 @@ export default function ChatPage() {
           if (toolName === "get_counterfactual_explanation") return "counterfactual"
           if (toolName === "generate_shap_bar_plot" || toolName === "generate_local_shap_bar_plot") return "local"
           if (toolName === "generate_shap_summary_plot") return "global"
-          return "extra" // Unrecognized or extra charts
+          return "extra" // Unrecognised or extra charts
         }
 
         const counterfactuals = []
@@ -249,6 +252,20 @@ export default function ChatPage() {
         setBusy(false)
       },
     })
+  }
+
+  const handleDesignCQuestion = (q, category) => {
+    // Mark this exact question string as clicked
+    setClickedQuestions(prev => new Set(prev).add(q))
+    
+    let promptText = ""
+    if (category === "tellsYou") {
+      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question.`
+    } else {
+      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
+    }
+    
+    handleSend(promptText)
   }
 
   const showInitialSuggestions =
@@ -401,12 +418,149 @@ export default function ChatPage() {
             overflow: "auto",
             background: "white",
             position: "relative",
+            display: "flex",
+            flexDirection: "column"
           }}
         >
+          {/* Main Message History */}
           <MessageList messages={messages} busy={busy} status={llmStage} />
 
-          {/* Centred Floating Dialogue Suggestion Box */}
-          {showInitialSuggestions && (
+          {/* Persistent Box for Design C 
+              If we are in initial state, center it like A/B.
+              Otherwise, push it to the bottom under the messages. */}
+          {activeDesign === "C" && !busy && (
+            <div
+              style={showInitialSuggestions ? {
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "80%",
+                maxWidth: 450,
+                background: "white",
+                borderRadius: 16,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                border: "1px solid #e5e7eb",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                animation: "fadeSlide 0.4s ease forwards",
+                zIndex: 10,
+              } : {
+                // Not initial state: show at bottom, but keep the exact same width and styling
+                width: "80%",
+                maxWidth: 450,
+                margin: "20px auto 0 auto", // Centers the box horizontally at the bottom
+                background: "white",
+                borderRadius: 16,
+                boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
+                border: "1px solid #e5e7eb",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                
+                {/* Category 1: What this tells you */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
+                    This explanation can answer:
+                  </div>
+                  {/* Display Questions Vertically */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {DESIGN_C_QUESTIONS.tellsYou.map((q, idx) => {
+                      const isClicked = clickedQuestions.has(q);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => handleDesignCQuestion(q, "tellsYou")}
+                          className="suggestion-btn"
+                          style={{ 
+                            display: "flex", 
+                            alignItems: "flex-start", 
+                            gap: "12px", 
+                            textAlign: "left",
+                            padding: "8px 16px",
+                            color: isClicked ? "#9ca3af" : undefined,
+                            backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
+                          }}
+                        >
+                          {/* Custom SVG Status Icon */}
+                          <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                            {isClicked ? (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
+                                <circle cx="12" cy="12" r="12" />
+                                <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                              </svg>
+                            ) : (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
+                                <circle cx="12" cy="12" r="10" />
+                              </svg>
+                            )}
+                          </div>
+                          <span style={{ lineHeight: "1.4" }}>{q}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Category 2: What it doesn't tell you */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    This explanation cannot answer:
+                  </div>
+                  {/* Display Questions Vertically */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {DESIGN_C_QUESTIONS.doesntTellYou.map((q, idx) => {
+                      const isClicked = clickedQuestions.has(q);
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => handleDesignCQuestion(q, "doesntTellYou")}
+                          className="suggestion-btn"
+                          style={{ 
+                            display: "flex", 
+                            alignItems: "flex-start", 
+                            gap: "12px", 
+                            textAlign: "left",
+                            padding: "8px 16px",
+                            color: isClicked ? "#9ca3af" : undefined,
+                            backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
+                          }}
+                        >
+                          {/* Custom SVG Status Icon */}
+                          <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                            {isClicked ? (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
+                                <circle cx="12" cy="12" r="12" />
+                                <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                              </svg>
+                            ) : (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
+                                <circle cx="12" cy="12" r="10" />
+                              </svg>
+                            )}
+                          </div>
+                          <span style={{ lineHeight: "1.4" }}>{q}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
+                  Choose one to explore more.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Centred Floating Dialogue Suggestion Box for Design A and B ONLY */}
+          {showInitialSuggestions && (activeDesign === "A" || activeDesign === "B") && (
             <div
               style={{
                 position: "absolute",
@@ -414,7 +568,7 @@ export default function ChatPage() {
                 left: "50%",
                 transform: "translate(-50%, -50%)",
                 width: "80%",
-                maxWidth: 500,
+                maxWidth: 450,
                 background: "white",
                 borderRadius: 16,
                 boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
@@ -469,61 +623,6 @@ export default function ChatPage() {
                     ))}
                   </div>
                 </>
-              )}
-
-              {/* DESIGN C */}
-              {activeDesign === "C" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-                  {/* Category 1: What this tells you */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
-                      This explanation can answer:
-                    </div>
-                    {/* Display Questions Horizontally (Wrapping) */}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {DESIGN_C_QUESTIONS.tellsYou.map((q, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question.`;
-                            handleSend(promptText);
-                          }}
-                          className="suggestion-btn"
-                          style={{ background: "#eff6ff", flex: "1 1 auto" }}
-                        >
-                          {q}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Category 2: What it doesn't tell you */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>
-                      This explanation cannot answer:
-                    </div>
-                    {/* Display Questions Horizontally (Wrapping) */}
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                      {DESIGN_C_QUESTIONS.doesntTellYou.map((q, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => {
-                            let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`;
-                            handleSend(promptText);
-                          }}
-                          className="suggestion-btn"
-                          style={{ flex: "1 1 auto" }}
-                        >
-                          {q}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
-                    Choose one to explore more.
-                  </div>
-                </div>
               )}
             </div>
           )}
