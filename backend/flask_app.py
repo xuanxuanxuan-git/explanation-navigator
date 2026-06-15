@@ -42,8 +42,8 @@ AZURE_OPENAI_TOOL_DEPLOYMENT = os.getenv("AZURE_OPENAI_TOOL_DEPLOYMENT", AZURE_O
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
 
 app = Flask(__name__)
-CORS(app, origins=ALLOWED_ORIGINS)
-
+# CORS(app, origins=ALLOWED_ORIGINS)
+CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
 # ============================================================================
 # LOGGING SETUP - Using app.logger
 # ============================================================================
