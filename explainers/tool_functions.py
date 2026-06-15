@@ -49,7 +49,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
     with _STATE_LOCK:
         if _STATE["ready"]:
             return
-        df = pd.read_csv("use_case_data/heloc_dataset_selected.csv")  
+        df = pd.read_csv("dataset/heloc_dataset_selected.csv")  
         # Convert special missing codes to NaN first
         df = df.replace([-9, -8, -7], np.nan)
 
