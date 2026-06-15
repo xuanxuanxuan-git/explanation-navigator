@@ -11,8 +11,8 @@ import requests
 from typing import Dict, List, Tuple, Optional
 
 from openai import OpenAI, AzureOpenAI
-# from chatbot.explainers.tool_schemas import explainer_tools
-# from chatbot.explainers.tool_functions import available_tools_mapping
+from explainers.tool_schemas import explainer_tools
+from explainers.tool_functions import available_tools_mapping
 
 load_dotenv()
 
