@@ -51,8 +51,12 @@ CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
 app.logger.setLevel(logging.DEBUG)
 app.logger.handlers.clear()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_DIR = os.path.join(BASE_DIR, "logs")
+# Use Azure's built-in LogFiles directory if running in Azure, otherwise use local 'logs' folder
+if os.getenv("WEBSITE_SITE_NAME"):  # This variable always exists in Azure
+    LOG_DIR = "/home/LogFiles/app_logs"
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    LOG_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
 def setup_app_logger(session_id=None):
