@@ -743,11 +743,8 @@ def get_instance(instance_id):
         return jsonify({"error": str(e)}), 400
 
 
-@app.route("/api/instance/predict", methods=['POST', 'OPTIONS'])
+@app.get("/api/instance/predict")
 def predict_instance_with_changes():
-    if request.method == 'OPTIONS':
-        return '', 204
-        
     data = request.get_json(force=True) or {}
     instance_id = data.get("instance_id")
     changes = data.get("changes") or {}
