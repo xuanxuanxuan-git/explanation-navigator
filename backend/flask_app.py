@@ -816,3 +816,5 @@ if __name__ == "__main__":
     print(f"LLM Provider: {LLM_PROVIDER}")
     
     app.run(host=FLASK_HOST, port=FLASK_PORT, debug=True)
+else:
+    setup_app_logger()
