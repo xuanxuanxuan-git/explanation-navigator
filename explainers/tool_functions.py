@@ -1,6 +1,6 @@
 import json
 import threading
-
+import os
 import numpy as np
 import pandas as pd
 import shap
@@ -42,6 +42,10 @@ _STATE = {
     }
 }
 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(CURRENT_DIR, "..", "dataset", "heloc_dataset_selected.csv")
+DATA_PATH = os.path.normpath(DATA_PATH)
+
 def _init_if_needed(test_size=0.2, random_state=42):
     if _STATE["ready"]:
         return
@@ -49,7 +53,7 @@ def _init_if_needed(test_size=0.2, random_state=42):
     with _STATE_LOCK:
         if _STATE["ready"]:
             return
-        df = pd.read_csv("dataset/heloc_dataset_selected.csv")  
+        df = pd.read_csv(DATA_PATH)  
         # Convert special missing codes to NaN first
         df = df.replace([-9, -8, -7], np.nan)
 

@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import logging
@@ -9,8 +10,14 @@ from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import requests
 from typing import Dict, List, Tuple, Optional
-
 from openai import OpenAI, AzureOpenAI
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from explainers.tool_schemas import explainer_tools
 from explainers.tool_functions import available_tools_mapping
 
@@ -78,7 +85,7 @@ def setup_app_logger(session_id=None):
             handler.close()
 
     # Create new file handler
-    file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
         fmt='%(asctime)s - %(levelname)s - %(message)s',
