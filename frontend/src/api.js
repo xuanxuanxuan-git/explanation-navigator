@@ -2,6 +2,16 @@
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'
 
+// Generate a unique ID with the exact format: log_YYYYMMDD_HHMMSS_user_random
+const SESSION_ID = (() => {
+  const d = new Date();
+  const pad = (n) => n.toString().padStart(2, '0');
+  const dateStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const timeStr = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const randomStr = Math.random().toString(36).substring(2, 9);
+  return `log_${dateStr}_${timeStr}_user_${randomStr}`;
+})();
+
 export async function health() {
   const r = await fetch(`${BASE_URL}/api/health`)
   return r.json()
@@ -11,7 +21,7 @@ export async function chatOnce({ message, history = [], model, system, options }
   const r = await fetch(`${BASE_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, model, system, options })
+    body: JSON.stringify({ message, history, model, system, options, session_id: SESSION_ID })
   })
   if (!r.ok) throw new Error(await r.text())
   return r.json()
@@ -24,7 +34,7 @@ export function chatStream({ message, history = [], model, system, options, onTo
   fetch(`${BASE_URL}/api/chat/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, model, system, options })
+    body: JSON.stringify({ message, history, model, system, options, session_id: SESSION_ID })
   }).then(async (res) => {
     if (!res.ok) throw new Error(await res.text())
     const reader = res.body.getReader()
@@ -67,7 +77,7 @@ export function chatWithToolsStream({ message, history = [], model, system, opti
   fetch(`${BASE_URL}/api/chat/tools/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, model, system, options })
+    body: JSON.stringify({ message, history, model, system, options, session_id: SESSION_ID })
   }).then(async (res) => {
     if (!res.ok) throw new Error(await res.text())
     const reader = res.body.getReader()

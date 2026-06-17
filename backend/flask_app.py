@@ -66,37 +66,18 @@ else:
     LOG_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
 
-def setup_app_logger(session_id=None):
-    """
-    Sets up a new file handler for the logger based on date, time, and session ID.
-    Removes any previously attached file handlers to start fresh.
-    """
+def log_user_action(session_id, message):
+    """Safely appends a log entry to a specific user's file."""
     if not session_id:
-        session_id = str(uuid.uuid4())[:8]
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"log_{timestamp}_{session_id}.log"
+        session_id = "anonymous"
+    app.logger.info(f"[{session_id}] {message}")
+    
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_filename = f"{session_id}.log"
     log_path = os.path.join(LOG_DIR, log_filename)
-
-    # Remove existing file handlers so we don't log to old files
-    for handler in app.logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            app.logger.removeHandler(handler)
-            handler.close()
-
-    # Create new file handler
-    file_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        fmt='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    file_handler.setFormatter(file_formatter)
     
-    app.logger.addHandler(file_handler)
-    app.logger.info(f"Started new log session: {log_filename}")
-    
-    return log_filename, session_id
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp} - INFO - {message}\n")
 
 # setup_app_logger()
 
@@ -240,21 +221,23 @@ def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
     return is_valid, missing_fields
 
 
-def _execute_tool_call(tool_name: str, arguments: dict) -> Tuple[bool, str, Optional[dict]]:
+def _execute_tool_call(tool_name: str, arguments: dict, session_id: str = "anonymous") -> Tuple[bool, str, Optional[dict]]:
     """Execute a tool call and return (success, text, visualisation)"""
 
     is_valid, missing_fields = _validate_tool_arguments(tool_name, arguments)
     if not is_valid:
         field_names = [f['name'] for f in missing_fields]
         error_msg = f"Incomplete arguments for {tool_name}. Missing arguments: {', '.join(field_names)}"
-        app.logger.warning(error_msg)
+        # app.logger.warning(error_msg)
+        log_user_action(session_id, f"TOOL VALIDATION FAILED: {error_msg}")
         
         missing_args_msg = "\n".join(f"- {f['name']}: {f['description']}" for f in missing_fields)  
         return False, missing_args_msg, None
 
     if tool_name not in available_tools_mapping:
         error_msg = f"Unknown tool: {tool_name}"
-        app.logger.error(error_msg)
+        # app.logger.error(error_msg)
+        log_user_action(session_id, f"TOOL ERROR: {error_msg}")
         return False, error_msg, None
     
     try:
@@ -273,9 +256,11 @@ def _execute_tool_call(tool_name: str, arguments: dict) -> Tuple[bool, str, Opti
 
     except TypeError as e:
         error_msg = f"Error calling {tool_name}: {str(e)}"
+        log_user_action(session_id, f"TOOL CRASH: {error_msg}")
         return False, error_msg, None
     except Exception as e:
         error_msg = f"Error executing {tool_name}: {str(e)}"
+        log_user_action(session_id, f"TOOL CRASH: {error_msg}")
         return False, error_msg, None
 
 # =============================================================================
@@ -413,7 +398,7 @@ llm_client = get_llm_client(LLM_PROVIDER)
 # =============================================================================
 
 def _chat_with_tools(messages: list, model: str = None, #history: ,
-                    options: dict = None, max_iterations: int = 3):
+                    options: dict = None, max_iterations: int = 3, session_id: str = "anonymous"):
     """
     Chat with tool calling support. Handles tool calls iteratively.
     Returns: (tool_reply_messages, visualisations)
@@ -425,7 +410,8 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
     visualisations = []
     
     while iteration < max_iterations:
-        app.logger.info(f"Tool iteration {iteration}")
+        # app.logger.info(f"Tool iteration {iteration}")
+        log_user_action(session_id, f"Tool iteration {iteration}")
         iteration += 1
         
         assistant_msg = llm_client.chat(
@@ -438,7 +424,8 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
         
         # Check for tool calls
         tool_calls = assistant_msg.get("tool_calls") or []
-        app.logger.info(f"Tools called: {tool_calls}")
+        # app.logger.info(f"Tools called: {tool_calls}")
+        log_user_action(session_id, f"Tools called: {tool_calls}")
         if not tool_calls:
             # Add assistant response to tool_reply, and return
             tool_reply.append({
@@ -477,7 +464,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                 tool_args = raw_args
 
             # Execute the tool
-            success, tool_result, visualisation = _execute_tool_call(tool_name, tool_args)
+            success, tool_result, visualisation = _execute_tool_call(tool_name, tool_args, session_id)
             
             tool_msg = {
                 "role": "tool",
@@ -504,7 +491,8 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
                 tool_reply.append(shorten_tool_msg)
             else:
                 tool_reply.append(tool_msg)
-            app.logger.info(f"Tool implementation result is: {tool_msg}")
+            # app.logger.info(f"Tool implementation result is: {tool_msg}")
+            log_user_action(session_id, f"Tool implementation result is: {tool_msg}")
             local_messages.append(tool_msg)
             
             if not success:
@@ -534,18 +522,8 @@ def health():
 
 @app.get("/api/session/reset")
 def reset_session():
-    """
-    Generates a new session log file. Call this endpoint when the web frontend 
-    is refreshed or a new user session begins.
-    """
-    log_filename, session_id = setup_app_logger()
-    return jsonify({
-        "ok": True, 
-        "session_id": session_id, 
-        "log_file": log_filename,
-        "message": "New log session started successfully."
-    })
-
+    return jsonify({"message": "Session reset successfully"}), 200  
+    
 @app.post("/api/chat")
 def chat_non_stream():
     """
@@ -556,9 +534,13 @@ def chat_non_stream():
     user_message = (data.get("message") or "").strip()
     history = _normalise_messages(data.get("history") or [])
     render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
+    session_id = data.get("session_id", "anonymous")
 
     if not user_message and not render_tools:
         return jsonify({"error": "Missing 'message' field"}), 400
+
+    if user_message:
+        log_user_action(session_id, f"USER ASKED: {user_message}")
 
     # Set a system message here (or pass from frontend).
     system = (data.get("system") or "Answer questions succinctly.").strip()
@@ -570,7 +552,8 @@ def chat_non_stream():
         messages.extend(history)
         if not render_tools:
             messages.append({"role": "user", "content": user_message})
-        app.logger.info(f"Chat history for api/chat: {messages}")
+        # app.logger.info(f"Chat history for api/chat: {messages}")
+        log_user_action(session_id, f"Chat history for api/chat: {messages}")
         
         assistant_msg = llm_client.chat(
             messages=messages,
@@ -579,9 +562,11 @@ def chat_non_stream():
         )
 
         reply = assistant_msg.get("content", "")
+        log_user_action(session_id, f"LLM REPLIED: {reply}")
         return jsonify({"reply": reply, "model": data.get("model")})
 
     except Exception as e:
+        log_user_action(session_id, f"ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 502
 
 
@@ -595,9 +580,13 @@ def chat_with_tools():
     history = _normalise_messages(data.get("history") or [])
     system = (data.get("system") or "").strip()
     model = data.get("model")
+    session_id = data.get("session_id", "anonymous")
     
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
+        
+    log_user_action(session_id, f"USER ASKED: {user_message}")
+        
     try:
         messages = []
 
@@ -615,12 +604,14 @@ def chat_with_tools():
         reply, _ = _chat_with_tools(
             messages=messages,
             model=model,
-            options=data.get("options") or {"temperature": 1}
+            options=data.get("options") or {"temperature": 1},
+            session_id=session_id
         )
 
         return jsonify({"reply": reply, "model": model})
 
     except Exception as e:
+        log_user_action(session_id, f"ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 502
 
 
@@ -634,10 +625,12 @@ def chat_with_tools_stream():
     history = _normalise_messages(data.get("history") or [])
     system = (data.get("system") or "").strip()
     model = data.get("model")
-    # tool_model = TOOL_CALLING_MODEL
+    session_id = data.get("session_id", "anonymous")
 
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
+        
+    log_user_action(session_id, f"New chat starts. User question is: {user_message}")
     
     messages = []
 
@@ -647,25 +640,26 @@ def chat_with_tools_stream():
 
     # Add history
     messages.extend(history)
-    app.logger.info(f"New chat starts. User question is: {user_message}")
-    # app.logger.info(f"History: {history}")
 
     # Add user message
     messages.append({"role": "user", "content": user_message})
-    app.logger.info(f"Messages passed to tool call: {messages}")
+    log_user_action(session_id, f"Messages passed to tool call: {messages}")
+    
     try: 
         reply_with_tools, visualisations = _chat_with_tools(
             messages=messages,
             model=model,
-            options=data.get("options") or {"temperature": 1}
+            options=data.get("options") or {"temperature": 1},
+            session_id=session_id
         )
-        app.logger.info(f"Tool calling model: {model}")
-        app.logger.info(f"Reply from the tool call: {reply_with_tools}")
+
+        log_user_action(session_id, f"Reply from the tool call: {reply_with_tools}")
+        
         num_tools = len(reply_with_tools)-1
         messages.extend(reply_with_tools)
         
         messages_with_tools = _normalise_messages(messages)
-        app.logger.info(f"Messages passed to streaming llm: {messages_with_tools}")
+        log_user_action(session_id, f"Messages passed to streaming llm: {messages_with_tools}")
 
         payload_model = data.get("final_model") or data.get("model")
 
@@ -682,7 +676,8 @@ def chat_with_tools_stream():
                 if done:
                     _shorten_messages(messages_with_tools, num_tools)
                     messages_with_tools.append({"role": "assistant", "content": assistant_text})
-                    app.logger.info(f"Complete message saved: {messages_with_tools}")
+                    log_user_action(session_id, f"Complete message saved: {messages_with_tools}")
+                    
                     yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
                     yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
                     return
@@ -690,6 +685,7 @@ def chat_with_tools_stream():
         return Response(generate(), mimetype="text/event-stream")
 
     except Exception as e:
+        log_user_action(session_id, f"ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 502
 
 
@@ -702,9 +698,13 @@ def chat_stream():
     user_message = (data.get("message") or "").strip()
     history = _normalise_messages(data.get("history") or [])
     render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
+    session_id = data.get("session_id", "anonymous")
 
     if not user_message and not render_tools:
         return jsonify({"error": "Missing 'message' field"}), 400
+
+    if user_message:
+        log_user_action(session_id, f"USER ASKED: {user_message}")
 
     system = (data.get("system") or "Answer questions succinctly.").strip()
     messages = []
@@ -734,6 +734,7 @@ def chat_stream():
             yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
 
             if done:
+                log_user_action(session_id, f"LLM REPLIED: {assistant_text}")
                 yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
                 return
 
@@ -754,7 +755,7 @@ def get_instance(instance_id):
         return jsonify({"error": str(e)}), 400
 
 
-@app.get("/api/instance/predict")
+@app.post("/api/instance/predict")
 def predict_instance_with_changes():
     data = request.get_json(force=True) or {}
     instance_id = data.get("instance_id")
@@ -823,5 +824,3 @@ if __name__ == "__main__":
     print(f"LLM Provider: {LLM_PROVIDER}")
     
     app.run(host=FLASK_HOST, port=FLASK_PORT, debug=True)
-else:
-    setup_app_logger()
