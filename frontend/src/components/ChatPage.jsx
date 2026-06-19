@@ -17,27 +17,68 @@ const DESIGN_A_QUESTIONS = [
 const DESIGN_B_CONTENT = {
   message: "Before we continue: ",
   question: "What do you think this explanation can tell you?", // Select a question you think it can answer.
-  options: [
-    "Which factors affected my result",
-    "How the model behaves overall",
-    "What actions I can take",
-    "Increasing \"loans not paid off\" can improve my score"
-  ]
+  options: {
+    local: [
+      "how each factor affected my score",
+      "Increasing \"on-time payment rate\" can improve my score",
+      "Which factor is generally the most important",
+      "What actions I can take to improve my score",
+    ],
+    counterfactual: [
+      "how each factor affected my score",
+      "Increasing \"on-time payment rate\" can improve my score",
+      "Which factor is generally the most important",
+      "What actions I can take to improve my score",
+    ],
+    global: [
+      "how each factor affected my score",
+      "Increasing \"on-time payment rate\" can improve my score",
+      "Which factor is generally the most important",
+      "What actions I can take to improve my score",
+    ],
+    cp: [
+      "how each factor affected my score",
+      "Increasing \"on-time payment rate\" can improve my score",
+      "Which factor is generally the most important",
+      "What actions I can take to improve my score",
+    ],
+  }
 }
 
 // What would you like to explore next?
-// The explanation can also answer:
-// Questions requiring other explanations:
 const DESIGN_C_QUESTIONS = {
-  tellsYou: [
-    "What factors lowered my score?",
-    "How much did a factor impact the decision?",
-  ],
-  doesntTellYou: [
-    "What can I do to improve my score to 50?",
-    "Does improving on-time payment rate improve my score?",
-    "Does a factor affect my friend as much as it does on me?"
-  ]
+  local: {
+    tellsYou: [
+      "What factors lowered my score?",
+      "How much did a factor impact my score?",
+    ],
+    doesntTellYou: [
+      "What can I do to improve my score to 50?",
+      "How the model behaves overall",
+      "Increasing \"on-time payment rate\" can improve my score",
+    ]
+  },
+  counterfactual: {
+    tellsYou: [
+      "What is the minimum change to get approved?",
+    ],
+    doesntTellYou: [
+      "Why was my original score so low?",
+      "Decreasing \"credit used\" alone can improve my score",
+      "My \"Loans not paid off\" negatively affects my score"
+    ]
+  },
+  global: {
+    tellsYou: [
+      "What factor does the system care about the most?",
+      "Is \"credit used\" generally important for everyone?",
+    ],
+    doesntTellYou: [
+      "What can I do to improve my personal score?",
+      "Why was my specific application denied?",
+      "How much did \"credit used\" impact my score?",
+    ]
+  }
 }
 
 // Dictionary to unify explanation labels for both the System Prompt and the UI Prompts
@@ -143,6 +184,39 @@ export default function ChatPage() {
       ui: selectedExplanations.map(k => EXPLANATION_DICT[k].ui).join(" and ")
     }
   }, [selectedExplanations])
+
+  // Dynamically compile Design B options based on selected explanations
+  const activeDesignBOptions = useMemo(() => {
+    const options = new Set();
+    selectedExplanations.forEach(exp => {
+      if (DESIGN_B_CONTENT.options[exp]) {
+        DESIGN_B_CONTENT.options[exp].forEach(opt => options.add(opt));
+      }
+    });
+    return Array.from(options);
+  }, [selectedExplanations]);
+
+  // Dynamically compile Design C "tells you" questions
+  const activeDesignCTellsYou = useMemo(() => {
+    const questions = new Set();
+    selectedExplanations.forEach(exp => {
+      if (DESIGN_C_QUESTIONS[exp]?.tellsYou) {
+        DESIGN_C_QUESTIONS[exp].tellsYou.forEach(q => questions.add(q));
+      }
+    });
+    return Array.from(questions);
+  }, [selectedExplanations]);
+
+  // Dynamically compile Design C "doesn't tell you" questions
+  const activeDesignCDoesntTellYou = useMemo(() => {
+    const questions = new Set();
+    selectedExplanations.forEach(exp => {
+      if (DESIGN_C_QUESTIONS[exp]?.doesntTellYou) {
+        DESIGN_C_QUESTIONS[exp].doesntTellYou.forEach(q => questions.add(q));
+      }
+    });
+    return Array.from(questions);
+  }, [selectedExplanations]);
 
   // The system prompt dynamically reads the current dashboard state.
   const system = useMemo(() => {
@@ -293,7 +367,7 @@ export default function ChatPage() {
     
     let promptText = ""
     if (category === "tellsYou") {
-      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question.`
+      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question, and also tell me the answer.`
     } else {
       promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
     }
@@ -313,7 +387,7 @@ export default function ChatPage() {
   }
 
   // Calculate unclicked Design B options
-  const unclickedDesignBOptions = DESIGN_B_CONTENT.options.filter(opt => !clickedQuestions.has(opt));
+  const unclickedDesignBOptions = activeDesignBOptions.filter(opt => !clickedQuestions.has(opt));
 
   return (
     <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12, paddingTop: 30 }}>
@@ -462,7 +536,7 @@ export default function ChatPage() {
           <MessageList messages={messages} busy={busy} status={llmStage} />
 
           {/* Persistent Box for Design C */}
-          {activeDesign === "C" && !busy && (
+          {activeDesign === "C" && !busy && (activeDesignCTellsYou.length > 0 || activeDesignCDoesntTellYou.length > 0) && (
             <div
               style={showInitialSuggestions ? {
                 position: "absolute",
@@ -482,7 +556,7 @@ export default function ChatPage() {
                 animation: "fadeSlide 0.4s ease forwards",
                 zIndex: 10,
               } : {
-                // Not initial state: show at bottom, but keep the exact same width and styling
+                // Not initial state: show at bottom
                 width: "80%",
                 maxWidth: 450,
                 margin: "20px auto 0 auto",
@@ -499,92 +573,92 @@ export default function ChatPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                 
                 {/* Category 1: What this tells you */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
-                    This explanation can answer:
-                  </div>
-                  {/* Display Questions Vertically */}
+                {activeDesignCTellsYou.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {DESIGN_C_QUESTIONS.tellsYou.map((q, idx) => {
-                      const isClicked = clickedQuestions.has(q);
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => handleDesignCQuestion(q, "tellsYou")}
-                          className="suggestion-btn"
-                          style={{ 
-                            display: "flex", 
-                            alignItems: "flex-start", 
-                            gap: "12px", 
-                            textAlign: "left",
-                            padding: "8px 16px",
-                            color: isClicked ? "#9ca3af" : undefined,
-                            backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
-                          }}
-                        >
-                          {/* Custom SVG Status Icon */}
-                          <div style={{ marginTop: "2px", flexShrink: 0 }}>
-                            {isClicked ? (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
-                                <circle cx="12" cy="12" r="12" />
-                                <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                              </svg>
-                            ) : (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
-                                <circle cx="12" cy="12" r="10" />
-                              </svg>
-                            )}
+                    <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
+                      This explanation can answer:
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {activeDesignCTellsYou.map((q, idx) => {
+                        const isClicked = clickedQuestions.has(q);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => handleDesignCQuestion(q, "tellsYou")}
+                            className="suggestion-btn"
+                            style={{ 
+                              display: "flex", 
+                              alignItems: "flex-start", 
+                              gap: "12px", 
+                              textAlign: "left",
+                              padding: "8px 16px",
+                              color: isClicked ? "#9ca3af" : undefined,
+                              backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
+                            }}
+                          >
+                            <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                              {isClicked ? (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
+                                  <circle cx="12" cy="12" r="12" />
+                                  <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                </svg>
+                              ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
+                                  <circle cx="12" cy="12" r="10" />
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{ lineHeight: "1.4" }}>{q}</span>
                           </div>
-                          <span style={{ lineHeight: "1.4" }}>{q}</span>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Category 2: What it doesn't tell you */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    This explanation cannot answer:
-                  </div>
-                  {/* Display Questions Vertically */}
+                {activeDesignCDoesntTellYou.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {DESIGN_C_QUESTIONS.doesntTellYou.map((q, idx) => {
-                      const isClicked = clickedQuestions.has(q);
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => handleDesignCQuestion(q, "doesntTellYou")}
-                          className="suggestion-btn"
-                          style={{ 
-                            display: "flex", 
-                            alignItems: "flex-start", 
-                            gap: "12px", 
-                            textAlign: "left",
-                            padding: "8px 16px",
-                            color: isClicked ? "#9ca3af" : undefined,
-                            backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
-                          }}
-                        >
-                          {/* Custom SVG Status Icon */}
-                          <div style={{ marginTop: "2px", flexShrink: 0 }}>
-                            {isClicked ? (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
-                                <circle cx="12" cy="12" r="12" />
-                                <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                              </svg>
-                            ) : (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
-                                <circle cx="12" cy="12" r="10" />
-                              </svg>
-                            )}
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      This explanation cannot answer:
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {activeDesignCDoesntTellYou.map((q, idx) => {
+                        const isClicked = clickedQuestions.has(q);
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => handleDesignCQuestion(q, "doesntTellYou")}
+                            className="suggestion-btn"
+                            style={{ 
+                              display: "flex", 
+                              alignItems: "flex-start", 
+                              gap: "12px", 
+                              textAlign: "left",
+                              padding: "8px 16px",
+                              color: isClicked ? "#9ca3af" : undefined,
+                              backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
+                            }}
+                          >
+                            <div style={{ marginTop: "2px", flexShrink: 0 }}>
+                              {isClicked ? (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
+                                  <circle cx="12" cy="12" r="12" />
+                                  <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                </svg>
+                              ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
+                                  <circle cx="12" cy="12" r="10" />
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{ lineHeight: "1.4" }}>{q}</span>
                           </div>
-                          <span style={{ lineHeight: "1.4" }}>{q}</span>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
                   Choose one to explore more.
