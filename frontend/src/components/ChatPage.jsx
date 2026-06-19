@@ -44,22 +44,51 @@ const DESIGN_C_QUESTIONS = {
 const EXPLANATION_DICT = {
   local: {
     system: "Local Feature Importance (SHAP Bar Plot)",
-    ui: "Local Feature Importance"
+    ui: "What Affected Your Score",
+    description: "how each factor positively or negatively impacted your score"
   },
   counterfactual: {
     system: "Counterfactual explanation for the current applicant",
-    ui: "Counterfactual Explanation"
+    ui: "How to Improve Your Score",
+    description: "the smallest change you could make to reach the target score"
   },
   global: {
     system: "Global Feature Importance (System-level SHAP Plot)",
-    ui: "Global Feature Importance"
+    ui: "What Mattered Most Overall",
+    description: "how important each factor is across all applicants"
   }
 }
 
+// Helper to dynamically generate the welcome message based on selected/clicked explanations
+const generateWelcomeMessage = (explanations) => {
+  if (explanations.length === 0) {
+    return "The interface currently displays no explanations. Let me know if you have any questions.";
+  }
+  const descText = explanations
+    .map(k => `**${EXPLANATION_DICT[k].ui}**, which shows ${EXPLANATION_DICT[k].description}`)
+    .join(" and ");
+  return `The interface currently displays ${descText}. Let me know if you have any questions.`;
+};
+
 export default function ChatPage() {
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hi! Ask a question.' }
+  const [userInstanceId] = useState(52)
+
+  // Track the list of explanations the user wants to see in the dashboard
+  const [selectedExplanations, setSelectedExplanations] = useState([
+    "local",
   ])
+
+  // Track which Design C and Design B questions have been clicked
+  const [clickedQuestions, setClickedQuestions] = useState(new Set())
+
+  // Initialise messages dynamically using the helper function
+  const [messages, setMessages] = useState([
+    { 
+      role: 'assistant', 
+      content: generateWelcomeMessage(["local"]) 
+    }
+  ])
+
   const [busy, setBusy] = useState(false)
   const [useStreaming, setUseStreaming] = useState(true)
   const [visualisations, setVisualisations] = useState([])
@@ -69,21 +98,24 @@ export default function ChatPage() {
   const [llmStage, setLlmStage] = useState("thinking")
   const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
   const messagesEndRef = useRef(null)
-  const [userInstanceId] = useState(52)
-
-  // Track which Design C questions have been clicked
-  const [clickedQuestions, setClickedQuestions] = useState(new Set())
-
-  // Track the list of explanations the user wants to see in the dashboard
-  const [selectedExplanations, setSelectedExplanations] = useState([
-    "local",
-  ])
 
   // Keep a ref of the selected explanations to safely access inside async callbacks
   const selectedExpsRef = useRef(selectedExplanations)
   useEffect(() => {
     selectedExpsRef.current = selectedExplanations
   }, [selectedExplanations])
+
+  // Update the initial message if the user clicks/toggles dashboard explanations BEFORE asking a question
+  useEffect(() => {
+    setMessages(prev => {
+      // If the user has already sent a message, don't overwrite the chat history
+      const hasUserMsg = prev.some(m => m.role === 'user');
+      if (hasUserMsg) return prev;
+      
+      // Re-generate the message based on exactly what is clicked right now
+      return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanations) }];
+    });
+  }, [selectedExplanations]);
 
   // Start a new log session on initial page load / refresh
   useEffect(() => {
@@ -118,7 +150,8 @@ export default function ChatPage() {
 
       Currently, the user has the following explanations visible on their dashboard:
       [ ${visibleTexts.system} ]
-      If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to these visible panels. Contextualise your answers based on what they can see.
+      If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to these visible panels. Contextualise your answers based on what they can see. 
+      IMPORTANT: Even though these explanations are displayed to the user, you do NOT automatically know what the actual data or results are. You MUST call the corresponding tool(s) to retrieve the data for these visible explanations so you can accurately understand the outputs and answer the user's questions. 
 
       Available features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
@@ -129,11 +162,11 @@ export default function ChatPage() {
       - Months since last credit application -- How long since they last applied for credit
 
       Guidelines:
-      - Keep answers concise, factual, and grounded in tool outputs
-      - Do NOT infer or assume missing values
-      - Do NOT hallucinate feature values or explanations
-      - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them
-      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup)
+      - Keep answers concise, factual, and grounded in tool outputs.
+      - Do NOT infer or assume missing values.
+      - Do not guess or hallucinate the explanation results. Do not add your own interpretation!
+      - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them.
+      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup).
       - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation(s) that is not currently shown (e.g., they ask about overall model behavior but only local importance is shown, or they ask for actionable changes but counterfactuals are missing), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate and display the correct explanation in your response. Do not just tell them another explanation is needed.`
   }, [userInstanceId, visibleTexts.system])
 
@@ -278,6 +311,9 @@ export default function ChatPage() {
       prev.includes(key) ? prev.filter(v => v !== key) : [...prev, key]
     )
   }
+
+  // Calculate unclicked Design B options
+  const unclickedDesignBOptions = DESIGN_B_CONTENT.options.filter(opt => !clickedQuestions.has(opt));
 
   return (
     <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12, paddingTop: 30 }}>
@@ -425,9 +461,7 @@ export default function ChatPage() {
           {/* Main Message History */}
           <MessageList messages={messages} busy={busy} status={llmStage} />
 
-          {/* Persistent Box for Design C 
-              If we are in initial state, center it like A/B.
-              Otherwise, push it to the bottom under the messages. */}
+          {/* Persistent Box for Design C */}
           {activeDesign === "C" && !busy && (
             <div
               style={showInitialSuggestions ? {
@@ -451,7 +485,7 @@ export default function ChatPage() {
                 // Not initial state: show at bottom, but keep the exact same width and styling
                 width: "80%",
                 maxWidth: 450,
-                margin: "20px auto 0 auto", // Centers the box horizontally at the bottom
+                margin: "20px auto 0 auto",
                 background: "white",
                 borderRadius: 16,
                 boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
@@ -559,8 +593,78 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Centred Floating Dialogue Suggestion Box for Design A and B ONLY */}
-          {showInitialSuggestions && (activeDesign === "A" || activeDesign === "B") && (
+          {/* Persistent Box for Design B */}
+          {activeDesign === "B" && !busy && unclickedDesignBOptions.length > 0 && (
+            <div
+              style={showInitialSuggestions ? {
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "80%",
+                maxWidth: 450,
+                background: "white",
+                borderRadius: 16,
+                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+                border: "1px solid #e5e7eb",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                animation: "fadeSlide 0.4s ease forwards",
+                zIndex: 10,
+              } : {
+                width: "80%",
+                maxWidth: 450,
+                margin: "20px auto 0 auto",
+                background: "white",
+                borderRadius: 16,
+                boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
+                border: "1px solid #e5e7eb",
+                padding: 24,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {/* Dynamic text based on whether it is the initial state or a subsequent turn */}
+              {showInitialSuggestions ? (
+                <>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", textAlign: "center" }}>
+                    {DESIGN_B_CONTENT.message}
+                  </div>
+                  <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 8, textAlign: "center" }}>
+                    {DESIGN_B_CONTENT.question}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
+                  What else do you think this explanation can tell you?
+                </div>
+              )}
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {unclickedDesignBOptions.map((opt, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      // Mark this option as clicked
+                      setClickedQuestions(prev => new Set(prev).add(opt));
+                      
+                      let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What else do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                      handleSend(promptText);
+                    }}
+                    className="suggestion-btn"
+                  >
+                    {opt}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Initial Only Box for Design A */}
+          {showInitialSuggestions && activeDesign === "A" && (
             <div
               style={{
                 position: "absolute",
@@ -581,49 +685,18 @@ export default function ChatPage() {
                 zIndex: 10,
               }}
             >
-              {/* DESIGN A */}
-              {activeDesign === "A" && (
-                <>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
-                    Which question would you like this explanation to help answer?
-                  </div>
-                  {DESIGN_A_QUESTIONS.map((q, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => handleSend(q)}
-                      className="suggestion-btn"
-                    >
-                      {q}
-                    </div>
-                  ))}
-                </>
-              )}
-
-              {/* DESIGN B */}
-              {activeDesign === "B" && (
-                <>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", textAlign: "center" }}>
-                    {DESIGN_B_CONTENT.message}
-                  </div>
-                  <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 8, textAlign: "center" }}>
-                    {DESIGN_B_CONTENT.question}
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {DESIGN_B_CONTENT.options.map((opt, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => {
-                          let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${DESIGN_B_CONTENT.question}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
-                          handleSend(promptText);
-                        }}
-                        className="suggestion-btn"
-                      >
-                        {opt}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
+              <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
+                Which question would you like this explanation to help answer?
+              </div>
+              {DESIGN_A_QUESTIONS.map((q, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => handleSend(q)}
+                  className="suggestion-btn"
+                >
+                  {q}
+                </div>
+              ))}
             </div>
           )}
 

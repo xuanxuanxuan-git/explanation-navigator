@@ -202,7 +202,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             hovertemplate="Factor: %{y}<br>Contribution: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
-            title=f"Contribution to the applicant's score",
+            title=f"What affected your score",
             xaxis={
                 "showticklabels": False,
                 "range": x_range,
@@ -261,7 +261,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
     y = [r["feature"] for r in rows_sorted][::-1]
     x = [r["mean_abs_shap"] for r in rows_sorted][::-1]
 
-    title = "Global feature importance" if source == "all" else "Feature importance for selected subgroup"
+    title = "What mattered most overall" if source == "all" else "What mattered most across selected subgroup"
 
     fig = go.Figure(
         data=[go.Bar(
@@ -270,11 +270,11 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             orientation="h",
             marker={"color": ["#10b981"] * len(x)},
             customdata=y,
-            hovertemplate="Factor: %{y}<br>Importance: %{x:.0f}<extra></extra>",
+            hovertemplate="Factor: %{y}<br>Importance: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
             title=title,
-            xaxis={"title": "System-level importance"},
+            xaxis={"title": "Overall importance level"},
             # yaxis={"title": "Feature"},
             margin={"l": 120, "r": 20, "t": 55, "b": 40},
         ),
@@ -413,7 +413,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
                 y=preds,
                 mode="lines",
                 line={"color": "#6366f1"},
-                hovertemplate=f"{feature}: %{{x:.2f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
+                hovertemplate=f"{feature}: %{{x:.1f}}<br>Prediction: %{{y:.1f}}<extra></extra>",
                 showlegend=False,
             ),
             go.Scatter(
@@ -421,12 +421,12 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
                 y=[base_pred],
                 mode="markers",
                 marker={"size": 10, "color": "#ef4444"},
-                hovertemplate=f"Current {feature}: %{{x:.2f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
+                hovertemplate=f"Current {feature}: %{{x:.0f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
                 showlegend=False,
             ),
         ],
         layout=go.Layout(
-            title=f"Effect of {feature} on predicted score",
+            title=f"How {feature} affects your score",
             xaxis={"title": feature, "range": [x_min, x_max]},
             yaxis={"title": "Credit score",             
                 "range": [0, 100],      # set y-axis fixed range
@@ -741,7 +741,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         ))
 
     fig.update_layout(
-        title=f"Actions to improve score",
+        title=f"How to improve your score",
         margin={"l": 40, "r": 20, "t": 50, "b": 120},
         template="plotly_white",
         showlegend=False,
@@ -760,7 +760,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             "target": target,
             "num_features_changed": len(changes),
             "changes": changes,
-            "system_reminder": "The user did not specify a target score. You MUST explicitly inform the user that a default target of 50 was assumed." if default_target else None
+            "system_reminder": "The user did not specify a target score. You MUST explicitly inform the user that a default target of 50 was assumed." if default_target else "Emphasise that all changes need to be applied together."
         },
         "visualisation": _plotly_payload(
             fig,
