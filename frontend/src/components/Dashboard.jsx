@@ -3,7 +3,8 @@ import Plot from "react-plotly.js"
 import {
   generateShapBarPlot,
   generateCounterfactualExplanation,
-  generateGlobalShapPlot
+  generateGlobalShapPlot,
+  generateAllCpPlots
 } from "../api.js"
 
 /* ---------- HELPERS ---------- */
@@ -50,11 +51,13 @@ export default function Dashboard({
   instanceId,
   visualisations = [],
   counterfactualViz,
+  cpVisualisations = [], // Data from chat stream (if LLM proactively calls it)
   selectedExplanations = []
 }) {
   const showLocal = selectedExplanations.includes("local");
   const showCF = selectedExplanations.includes("counterfactual");
   const showGlobal = selectedExplanations.includes("global");
+  const showCP = selectedExplanations.includes("cp");
 
   /* SHAP state */
   const [shapViz, setShapViz] = useState(null)
@@ -72,6 +75,11 @@ export default function Dashboard({
   const [globalViz, setGlobalViz] = useState(null)
   const [globalLoading, setGlobalLoading] = useState(false)
   const [globalError, setGlobalError] = useState("")
+
+  /* CP Plots state */
+  const [cpViz, setCpViz] = useState(null)
+  const [cpLoading, setCpLoading] = useState(false)
+  const [cpError, setCpError] = useState("")
 
   /* Extra figures carousel state */
   const [vizIndex, setVizIndex] = useState(0)
@@ -213,6 +221,53 @@ export default function Dashboard({
     setCfUpdating(false)
   }
 
+  /* ---------- LOAD CP PLOTS ---------- */
+  
+  // 1) Set state from proactive LLM generations if it matches
+  useEffect(() => {
+    if (cpVisualisations && cpVisualisations.length > 0) {
+      const norm = normaliseVisualisation(
+        cpVisualisations[0],
+        `Ceteris Paribus for applicant ${instanceId}`
+      )
+      setCpViz(norm)
+      setCpLoading(false)
+      setCpError("")
+    }
+  }, [cpVisualisations, instanceId])
+
+  // 2) Or auto-load it based on the dashboard checkbox
+  useEffect(() => {
+    // If we don't want to show it, do nothing
+    if (!showCP) return
+    
+    // If the LLM just proactively generated it, don't immediately overwrite it
+    if (cpViz) return 
+
+    let cancelled = false;
+    async function loadCP() {
+      setCpLoading(true)
+      setCpError("")
+      try {
+        const res = await generateAllCpPlots(instanceId)
+        if (cancelled) return
+        const norm = normaliseVisualisation(res, `Ceteris Paribus for applicant ${instanceId}`)
+        setCpViz(norm)
+      } catch (e) {
+        if (cancelled) return
+        setCpError(e.message || "Failed to load CP visualisation")
+        setCpViz(null)
+      } finally {
+        if (!cancelled) setCpLoading(false)
+      }
+    }
+
+    loadCP()
+
+    return () => { cancelled = true }
+  }, [instanceId, showCP]) // Removed cpViz and cpLoading from here!
+
+
   /* ---------- EXTRA FIGURES ---------- */
 
   const extraFigures = useMemo(
@@ -257,7 +312,7 @@ export default function Dashboard({
   /* ---------- RENDER ---------- */
 
   // Provide an empty state if no explanations are selected
-  if (!showLocal && !showCF && !showGlobal && !hasExtra) {
+  if (!showLocal && !showCF && !showGlobal && !showCP && !hasExtra) {
     return (
       <div style={{ padding: 20, color: "#6b7280", textAlign: "center", fontSize: 13 }}>
         No explanations selected. Please check options on the left.
@@ -277,7 +332,6 @@ export default function Dashboard({
         overflowY: "auto",
       }}
     >
-
 
       {/* ===== SHAP SECTION (Local) ===== */}
       {showLocal && (
@@ -429,6 +483,45 @@ export default function Dashboard({
           )}
         </div>
       )}
+
+      {/* ===== CETERIS PARIBUS (CP) SECTION ===== */}
+      {showCP && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {cpLoading && !cpViz && (
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              Loading CP Plots
+            </div>
+          )}
+
+          {cpError && (
+            <div style={{ padding: 8, borderRadius: 8, background: "#fee2e2", color: "#991b1b", fontSize: 12 }}>
+              {cpError}
+            </div>
+          )}
+
+          {cpViz?.type === "plotly" && (
+            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+              <Plot
+                data={cpViz.figure?.data || []}
+                layout={{
+                  autosize: true,
+                  // Height will be defined dynamically by the backend figure generation based on rows
+                  height: cpViz.figure?.layout?.height || 500, 
+                  ...(cpViz.figure?.layout || {}),
+                }}
+                config={{
+                  responsive: true,
+                  displaylogo: false,
+                  ...(cpViz.config || {}),
+                }}
+                style={{ width: "100%" }}
+                useResizeHandler
+              />
+            </div>
+          )}
+        </div>
+      )}
+
 
       {/* ===== EXTRA FIGURES CAROUSEL ===== */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

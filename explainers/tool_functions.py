@@ -14,7 +14,7 @@ from sklearn.metrics import roc_auc_score, accuracy_score
 
 import plotly.graph_objects as go
 import plotly.io as pio
-
+from plotly.subplots import make_subplots
 
 # ----------------------------
 # Global cached state
@@ -420,7 +420,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
                 x=[base_val],
                 y=[base_pred],
                 mode="markers",
-                marker={"size": 10, "color": "#ef4444"},
+                marker={"size": 8, "color": "#ef4444"},
                 hovertemplate=f"Current {feature}: %{{x:.0f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
                 showlegend=False,
             ),
@@ -435,7 +435,14 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             margin={"l": 60, "r": 20, "t": 55, "b": 40},
         ),
     )
-
+    # Update y-axis to strictly use specific tickvals
+    fig.update_yaxes(
+        range=[0, 100], 
+        tickmode="array",
+        tickvals=[0, 25, 50, 75, 100], 
+        gridcolor="white", # Contrasts with blue background
+    )
+    
     return {
         "data": {
             "instance_id": instance_id,
@@ -445,6 +452,135 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             "prediction": [round(p, 2) for p in preds],
         },
         "visualisation": _plotly_payload(fig, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
+    }
+
+def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
+    """
+    Generates Ceteris Paribus (What-If) plots for all features for a given instance.
+    Arranges them in a subplot grid.
+    """
+    _init_if_needed()
+    instance_id = int(instance_id)
+    _check_instance_id(instance_id)
+
+    grid_points = int(grid_points)
+
+    X_test = _STATE["X_test"]
+    scaler = _STATE["scaler"]
+    model = _STATE["model"]
+    feature_ranges = _STATE["feature_ranges"]
+
+    features = list(X_test.columns)
+    num_features = len(features)
+    
+    # Calculate grid layout (e.g., 2 columns)
+    cols = 2
+    rows = (num_features + cols - 1) // cols
+
+    # Create subplots
+    fig = make_subplots(
+        rows=rows, 
+        cols=cols, 
+        vertical_spacing=0.15,
+        horizontal_spacing=0.1
+    )
+
+    x0 = X_test.iloc[[instance_id]].copy()
+    base_pred = float(model.predict_proba(scaler.transform(x0))[0][0]*100)
+
+    data_summary = {"instance_id": instance_id, "features": {}}
+
+    for i, feature in enumerate(features):
+        r = (i // cols) + 1
+        c = (i % cols) + 1
+
+        base_val = float(x0[feature].iloc[0])
+        x_min = float(feature_ranges.get(feature).get("min"))
+        x_max = float(feature_ranges.get(feature).get("max"))
+        grid = np.linspace(x_min, x_max, grid_points)
+
+        preds = []
+        for v in grid:
+            xv = x0.copy()
+            xv[feature] = v
+            preds.append(float(model.predict_proba(scaler.transform(xv))[0][0]*100))
+
+        # y=50 line
+        fig.add_trace(
+            go.Scatter(
+                x=[x_min, x_max],
+                y=[50, 50],
+                mode="lines",
+                line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+                hoverinfo="skip",  # Prevents hover tooltip from catching on this line
+                showlegend=False,
+            ),
+            row=r, col=c
+        )
+
+        # Add the line trace for the grid
+        fig.add_trace(
+            go.Scatter(
+                x=grid.tolist(),
+                y=preds,
+                mode="lines",
+                line={"color": "#6366f1"},
+                hovertemplate=f"{feature}: %{{x:.1f}}<br>Prediction: %{{y:.1f}}<extra></extra>",
+                showlegend=False,
+            ),
+            row=r, col=c
+        )
+        
+        # Add the marker trace for the current base value
+        fig.add_trace(
+            go.Scatter(
+                x=[base_val],
+                y=[base_pred],
+                mode="markers",
+                marker={"size": 8, "color": "#ef4444"},
+                hovertemplate=f"Current {feature}: %{{x:.0f}}<br>Prediction: %{{y:.0f}}<extra></extra>",
+                showlegend=False,
+            ),
+            row=r, col=c
+        )
+
+        # Update y-axis to strictly use specific tickvals
+        fig.update_yaxes(
+            range=[0, 100], 
+            tickmode="array",
+            tickvals=[0, 50, 100], 
+            gridcolor="white", # Contrasts with blue background
+            tickfont={"size": 12},
+            row=r, col=c
+        )
+        
+        if c == 1:  # Only add y-axis label on the left-most plots
+            fig.update_yaxes(title_text="Credit score", title_standoff=5, row=r, col=c)
+            
+        font_size = 12 if len(feature) > 15 else 14
+        fig.update_xaxes(
+            title_text=feature,
+            title_font = {"size":font_size},
+            range=[x_min, x_max],
+            gridcolor="white",
+            tickfont={"size": 12},
+            row=r, col=c
+        )
+
+    # Format the overall layout
+    fig.update_layout(
+        title="How features affect your score",
+        height=max(200 * rows, 300), 
+        margin={"l": 50, "r": 25, "t": 65, "b": 40}, 
+        showlegend=False,
+        # plot_bgcolor="#e0f2fe",     
+    )
+
+    return {
+        "data": {
+            "message": "CP plots generated for all features.",
+        },
+        "visualisation": _plotly_payload(fig, meta={"tool": "generate_all_cp_plots", "instance_id": instance_id}),
     }
 
 def get_partial_dependence_plot(feature: str, grid_points: int = 150):
@@ -522,7 +658,14 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
         yaxis={"title": "Average score", "range": [0, 100]},
         margin={"l": 60, "r": 20, "t": 55, "b": 40},
     )
-
+        # Update y-axis to strictly use specific tickvals
+    fig.update_yaxes(
+        range=[0, 100], 
+        tickmode="array",
+        tickvals=[0, 25, 50, 75, 100], 
+        gridcolor="white", # Contrasts with blue background
+    )
+    
     return {
         "data": {
             "feature": feature,
@@ -1156,6 +1299,7 @@ available_tools_mapping = {
     "get_instance_features_and_prediction": get_instance_features_and_prediction,
     "get_average_prediction": get_average_prediction,
     "get_cp_plot": get_cp_plot,
+    "generate_all_cp_plots": generate_all_cp_plots,
     "get_counterfactual_explanation": get_counterfactual_explanation,
     "get_subgroup": get_subgroup,
     "predict_with_feature_changes": predict_with_feature_changes,

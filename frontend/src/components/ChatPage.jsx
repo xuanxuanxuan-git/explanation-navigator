@@ -19,25 +19,25 @@ const DESIGN_B_CONTENT = {
   question: "What do you think this explanation can tell you?", // Select a question you think it can answer.
   options: {
     local: [
-      "how each factor affected my score",
+      "How each factor affected my score",
       "Increasing \"on-time payment rate\" can improve my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     counterfactual: [
-      "how each factor affected my score",
+      "How each factor affected my score",
       "Increasing \"on-time payment rate\" can improve my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     global: [
-      "how each factor affected my score",
+      "How each factor affected my score",
       "Increasing \"on-time payment rate\" can improve my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     cp: [
-      "how each factor affected my score",
+      "How each factor affected my score",
       "Increasing \"on-time payment rate\" can improve my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
@@ -78,6 +78,17 @@ const DESIGN_C_QUESTIONS = {
       "Why was my specific application denied?",
       "How much did \"credit used\" impact my score?",
     ]
+  },
+  cp: {
+    tellsYou: [
+      "What happens if I change just one specific factor?",
+      "How sensitive is my score to a factor?"
+    ],
+    doesntTellYou: [
+      "Why did I get this score originally?",
+      "Which factor is the most important?",
+      "What is the minimum change to get approved?",
+    ]
   }
 }
 
@@ -93,11 +104,16 @@ const EXPLANATION_DICT = {
     ui: "How to Improve Your Score",
     description: "the smallest change you could make to reach the target score"
   },
+  cp: {
+    system: "Ceteris Paribus (What-If) Plots for all features",
+    ui: "What-If Scenarios",
+    description: "how changing a single factor would change your score"
+  },
   global: {
     system: "Global Feature Importance (System-level SHAP Plot)",
     ui: "What Mattered Most Overall",
     description: "how important each factor is across all applicants"
-  }
+  },
 }
 
 // Helper to dynamically generate the welcome message based on selected/clicked explanations
@@ -134,6 +150,7 @@ export default function ChatPage() {
   const [useStreaming, setUseStreaming] = useState(true)
   const [visualisations, setVisualisations] = useState([])
   const [counterfactualViz, setCounterfactualViz] = useState(null)
+  const [cpVisualisations, setCpVisualisations] = useState([])
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
@@ -303,19 +320,24 @@ export default function ChatPage() {
           if (toolName === "get_counterfactual_explanation") return "counterfactual"
           if (toolName === "generate_shap_bar_plot" || toolName === "generate_local_shap_bar_plot") return "local"
           if (toolName === "generate_shap_summary_plot") return "global"
+          if (toolName === "get_cp_plot" || toolName === "generate_all_cp_plots") return "cp"
           return "extra" // Unrecognised or extra charts
         }
 
         const counterfactuals = []
+        const cpVizs = []
         const inlineVizes = []
 
         vizs.forEach(v => {
           const tool = v?.meta?.tool || v?.visualisation?.meta?.tool
           const vizType = getVizType(tool)
 
-          // Extract counterfactual explicitly in case the dashboard needs to parse its target
+          // Extract specific types to pass down to Dashboard
           if (vizType === "counterfactual") {
             counterfactuals.push(v)
+          }
+          else if (vizType === "cp") {
+            cpVizs.push(v)
           }
 
           // If the explanation is NOT currently selected in the dashboard checklist, 
@@ -327,6 +349,10 @@ export default function ChatPage() {
 
         if (counterfactuals.length > 0) {
           setCounterfactualViz(JSON.parse(JSON.stringify(counterfactuals[0])))
+        }
+
+        if (cpVizs.length > 0) {
+          setCpVisualisations(cpVizs)
         }
 
         if (inlineVizes.length > 0) {
@@ -445,11 +471,20 @@ export default function ChatPage() {
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
               <input
                 type="checkbox"
+                checked={selectedExplanations.includes("cp")}
+                onChange={() => handleToggleExplanation("cp")}
+              />
+              Ceteris Paribus (What-If) Plots
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+              <input
+                type="checkbox"
                 checked={selectedExplanations.includes("global")}
                 onChange={() => handleToggleExplanation("global")}
               />
               Global Feature Importance
             </label>
+            
           </div>
         </div>
 
@@ -468,6 +503,7 @@ export default function ChatPage() {
             instanceId={userInstanceId}
             visualisations={visualisations}
             counterfactualViz={counterfactualViz}
+            cpVisualisations={cpVisualisations}
             selectedExplanations={selectedExplanations}
           />
         </div>
@@ -738,7 +774,7 @@ export default function ChatPage() {
           )}
 
           {/* Initial Only Box for Design A */}
-          {showInitialSuggestions && activeDesign === "A" && (
+          {/* {showInitialSuggestions && activeDesign === "A" && (
             <div
               style={{
                 position: "absolute",
@@ -772,7 +808,7 @@ export default function ChatPage() {
                 </div>
               ))}
             </div>
-          )}
+          )} */}
 
           <div ref={messagesEndRef} />
         </div>

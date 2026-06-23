@@ -27,8 +27,6 @@ export async function chatOnce({ message, history = [], model, system, options }
   return r.json()
 }
 
-// add function about api/chat/tools
-
 // SSE streaming
 export function chatStream({ message, history = [], model, system, options, onToken, onDone, onError }) {
   fetch(`${BASE_URL}/api/chat/stream`, {
@@ -175,6 +173,17 @@ export async function generateCounterfactualExplanation(
 
 export async function generateGlobalShapPlot() {
   const res = await fetch(`${BASE_URL}/api/global/global-shap-plot`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  })
+  if (!res.ok) {
+    throw new Error(await res.text())
+  }
+  return res.json()
+}
+
+export async function generateAllCpPlots(instanceId) {
+  const res = await fetch(`${BASE_URL}/api/instance/${instanceId}/cp-plots`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   })

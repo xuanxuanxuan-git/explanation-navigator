@@ -813,7 +813,20 @@ def global_shap_plot():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-    
+
+@app.get("/api/instance/<int:instance_id>/cp-plots")
+def generate_all_cp_plots(instance_id):
+    """
+    Endpoint to retrieve CP plots for all features.
+    """
+    try:
+        result = available_tools_mapping["generate_all_cp_plots"](
+            instance_id=instance_id,
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+        
 # =============================================================================
 # MAIN
 # =============================================================================
