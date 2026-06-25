@@ -202,12 +202,48 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             hovertemplate="Factor: %{y}<br>Contribution: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
-            title=f"What affected your score",
+            title={
+                "text": "What affected your score<br><span style='font-size: 13px; color: gray; font-weight: normal;'>How each factor contributes to your score</span>",
+                "y": 0.88,      
+                "x": 0.05,      
+            },
             xaxis={
                 "showticklabels": False,
                 "range": x_range,
+                "zeroline": False,
             },
-            margin={"l": 140, "r": 20, "t": 55, "b": 40}, 
+            yaxis={
+                "ticklabelstandoff": 5, 
+            },
+            margin={"l": 140, "r": 20, "t": 85, "b": 20}, 
+            shapes=[
+                dict(
+                    type="line",
+                    xref="x", x0=0, x1=0,
+                    yref="paper", y0=0, y1=1.1, 
+                    line=dict(color="black", width=1)
+                )
+            ],
+            annotations=[
+                dict(
+                    x=0, y=1.15, 
+                    xref="x", yref="paper",
+                    text="<span style='font-size: 14px;'>←</span> Decrease Score",
+                    showarrow=False,
+                    xanchor="right",
+                    xshift=-5,
+                    font=dict(size=10, color="gray")
+                ),
+                dict(
+                    x=0, y=1.15, 
+                    xref="x", yref="paper",
+                    text="Increase Score <span style='font-size: 14px;'>→</span>",
+                    showarrow=False,
+                    xanchor="left",
+                    xshift=5,
+                    font=dict(size=10, color="gray")
+                )
+            ]
         ),
     )
 
@@ -261,7 +297,9 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
     y = [r["feature"] for r in rows_sorted][::-1]
     x = [r["mean_abs_shap"] for r in rows_sorted][::-1]
 
-    title = "What mattered most overall" if source == "all" else "What mattered most across selected subgroup"
+    # Dynamic Main Title and Subtitle based on the source
+    main_title = "What mattered most overall" if source == "all" else "What mattered most across selected subgroup"
+    subtitle = "How important each factor is across all applicants" if source == "all" else "How important each factor is across these applicants"
 
     fig = go.Figure(
         data=[go.Bar(
@@ -273,13 +311,22 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             hovertemplate="Factor: %{y}<br>Importance: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
-            title=title,
-            xaxis={"title": "Overall importance level"},
-            # yaxis={"title": "Feature"},
-            margin={"l": 120, "r": 20, "t": 55, "b": 40},
+            title={
+                "text": f"{main_title}<br><span style='font-size: 13px; color: gray; font-weight: normal;'>{subtitle}</span>",
+                "y": 0.88,      
+                "x": 0.05, 
+            },
+            xaxis={"title": {
+                    "text": "Overall importance level",
+                    "font": {"size": 12} 
+                }},
+            yaxis={
+                "ticklabelstandoff": 5, 
+            },
+            margin={"l": 120, "r": 20, "t": 75, "b": 20},
         ),
     )
-
+    
     return {
         "data": {
             "source": source,
@@ -376,7 +423,6 @@ def get_average_prediction(source: str = "all", indices=None):
         "visualisation": None,
     }
 
-# Change in credit score
 def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     _init_if_needed()
     instance_id = int(instance_id)
@@ -408,6 +454,16 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
     base_pred = float(model.predict_proba(scaler.transform(x0))[0][0]*100)
     fig = go.Figure(
         data=[
+            # y=50 line (for consistency with the 'all cp plots' view)
+            go.Scatter(
+                x=[x_min, x_max],
+                y=[50, 50],
+                mode="lines",
+                line={"color": "#94a3b8", "width": 1.5, "dash": "dash"},
+                hoverinfo="skip",
+                showlegend=False,
+            ),
+            # Line trace for the grid
             go.Scatter(
                 x=grid.tolist(),
                 y=preds,
@@ -416,6 +472,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
                 hovertemplate=f"{feature}: %{{x:.1f}}<br>Prediction: %{{y:.1f}}<extra></extra>",
                 showlegend=False,
             ),
+            # Marker trace for the current base value
             go.Scatter(
                 x=[base_val],
                 y=[base_pred],
@@ -426,13 +483,16 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             ),
         ],
         layout=go.Layout(
-            title=f"How {feature} affects your score",
-            xaxis={"title": feature, "range": [x_min, x_max]},
-            yaxis={"title": "Credit score",             
-                "range": [0, 100],      # set y-axis fixed range
-                # "tickformat": ".0%"   # optional: show as percentages},
+            title={
+                "text": f"How changing {feature} <br>affects your score",
+                "font": {"size": 16},
+                "y": 0.9,
+            },
+            xaxis={"title": feature, "range": [x_min, x_max], "gridcolor": "white"},
+            yaxis={"title": "Credit score", "title_standoff": 5,           
+                "range": [0, 100],      
             },   
-            margin={"l": 60, "r": 20, "t": 55, "b": 40},
+            margin={"l": 60, "r": 30, "t": 73, "b": 40},
         ),
     )
     # Update y-axis to strictly use specific tickvals
@@ -488,8 +548,6 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
     x0 = X_test.iloc[[instance_id]].copy()
     base_pred = float(model.predict_proba(scaler.transform(x0))[0][0]*100)
 
-    data_summary = {"instance_id": instance_id, "features": {}}
-
     for i, feature in enumerate(features):
         r = (i // cols) + 1
         c = (i % cols) + 1
@@ -499,11 +557,11 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
         x_max = float(feature_ranges.get(feature).get("max"))
         grid = np.linspace(x_min, x_max, grid_points)
 
-        preds = []
-        for v in grid:
-            xv = x0.copy()
-            xv[feature] = v
-            preds.append(float(model.predict_proba(scaler.transform(xv))[0][0]*100))
+        # Vectorized Predictions (Keeps it lightning fast!)
+        xv_batch = x0.loc[x0.index.repeat(grid_points)].copy()
+        xv_batch[feature] = grid
+        scaled_batch = scaler.transform(xv_batch)
+        preds = model.predict_proba(scaled_batch)[:, 0] * 100
 
         # y=50 line
         fig.add_trace(
@@ -522,7 +580,7 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
         fig.add_trace(
             go.Scatter(
                 x=grid.tolist(),
-                y=preds,
+                y=preds.tolist(),
                 mode="lines",
                 line={"color": "#6366f1"},
                 hovertemplate=f"{feature}: %{{x:.1f}}<br>Prediction: %{{y:.1f}}<extra></extra>",
@@ -555,7 +613,7 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
         )
         
         if c == 1:  # Only add y-axis label on the left-most plots
-            fig.update_yaxes(title_text="Credit score", title_standoff=5, row=r, col=c)
+            fig.update_yaxes(title_text="Credit score", title_standoff=4, row=r, col=c)
             
         font_size = 12 if len(feature) > 15 else 14
         fig.update_xaxes(
@@ -567,13 +625,16 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
             row=r, col=c
         )
 
-    # Format the overall layout
+    # Format the overall layout with subtitle and consistent spacing
     fig.update_layout(
-        title="How features affect your score",
+        title={
+            "text": "What-If Scenarios<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How changing a single factor changes your score</span>",
+            "y": 0.94,
+            "x": 0.05,
+        },
         height=max(200 * rows, 300), 
-        margin={"l": 50, "r": 25, "t": 65, "b": 40}, 
+        margin={"l": 50, "r": 25, "t": 90, "b": 40}, 
         showlegend=False,
-        # plot_bgcolor="#e0f2fe",     
     )
 
     return {
