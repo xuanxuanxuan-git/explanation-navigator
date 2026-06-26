@@ -6,7 +6,6 @@ import InstanceEditor from './InstanceEditor.jsx'
 import Dashboard from './Dashboard.jsx'
 
 // Which question would you like this explanation to help answer?
-// Loop: what else would you like to know?
 const DESIGN_A_QUESTIONS = [
   "Why is my score so low?",
   "What can I do to improve my score?",
@@ -95,22 +94,22 @@ const DESIGN_C_QUESTIONS = {
 // Dictionary to unify explanation labels for both the System Prompt and the UI Prompts
 const EXPLANATION_DICT = {
   local: {
-    system: "Local Feature Importance (SHAP Bar Plot)",
+    system: "Which factors pushed the applicant's score up or down (local feature importance)",
     ui: "What Affected Your Score",
     description: "how each factor positively or negatively impacted your score"
   },
   counterfactual: {
-    system: "Counterfactual explanation for the current applicant",
+    system: "Smallest set of changes needed for the current applicant",
     ui: "How to Improve Your Score",
     description: "the smallest change you could make to reach the target score"
   },
   cp: {
-    system: "Ceteris Paribus (What-If) Plots for all features",
+    system: "How one applicant's predicted credit score changes when changing a single factor",
     ui: "What-If Scenarios",
     description: "how changing a single factor would change your score"
   },
   global: {
-    system: "Global Feature Importance (System-level SHAP Plot)",
+    system: "Which factors matter the most across everyone",
     ui: "What Mattered Most Overall",
     description: "how important each factor is across all applicants"
   },
@@ -135,14 +134,17 @@ export default function ChatPage() {
     "local",
   ])
 
+  // NEW: Track whether the explanations menu is collapsed or expanded
+  const [showExplanationsMenu, setShowExplanationsMenu] = useState(true)
+
   // Track which Design C and Design B questions have been clicked
   const [clickedQuestions, setClickedQuestions] = useState(new Set())
 
   // Initialise messages dynamically using the helper function
   const [messages, setMessages] = useState([
-    { 
-      role: 'assistant', 
-      content: generateWelcomeMessage(["local"]) 
+    {
+      role: 'assistant',
+      content: generateWelcomeMessage(["local"])
     }
   ])
 
@@ -169,7 +171,7 @@ export default function ChatPage() {
       // If the user has already sent a message, don't overwrite the chat history
       const hasUserMsg = prev.some(m => m.role === 'user');
       if (hasUserMsg) return prev;
-      
+
       // Re-generate the message based on exactly what is clicked right now
       return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanations) }];
     });
@@ -237,14 +239,14 @@ export default function ChatPage() {
 
   // The system prompt dynamically reads the current dashboard state.
   const system = useMemo(() => {
-    return `You are a helpful assistant explaining a machine learning model used as an automated pre-qualification tool for credit line increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit line. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit line increase.
+    return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit limit. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit limit increase.
 
       Currently, the user has the following explanations visible on their dashboard:
       [ ${visibleTexts.system} ]
       If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to these visible panels. Contextualise your answers based on what they can see. 
       IMPORTANT: Even though these explanations are displayed to the user, you do NOT automatically know what the actual data or results are. You MUST call the corresponding tool(s) to retrieve the data for these visible explanations so you can accurately understand the outputs and answer the user's questions. 
 
-      Available features include 6 variables:
+      Available factors/features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
       - Months since last late payment -- How long since they last missed a payment
       - On-time payment rate (%) -- How often they've paid on time
@@ -256,9 +258,9 @@ export default function ChatPage() {
       - Keep answers concise, factual, and grounded in tool outputs.
       - Do NOT infer or assume missing values.
       - Do not guess or hallucinate the explanation results. Do not add your own interpretation!
-      - If required inputs (e.g., instance_id, feature, target) are missing, ask the user to provide them.
-      - Clearly distinguish between local explanations (single applicant) and global explanations (entire dataset or subgroup).
-      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation(s) that is not currently shown (e.g., they ask about overall model behavior but only local importance is shown, or they ask for actionable changes but counterfactuals are missing), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate and display the correct explanation in your response. Do not just tell them another explanation is needed.`
+      - If required inputs (e.g., instance_id, factor name, target) are missing, ask the user to provide them.
+      - Clearly distinguish between advice for a single applicant versus trends for EVERYONE (global).
+      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation(s) that is not currently shown (e.g., they ask how to improve their score, but are looking at their current score breakdown), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate the correct explanation in your response. Do not just tell them another explanation is needed.`
   }, [userInstanceId, visibleTexts.system])
 
   async function handleSend(text) {
@@ -390,14 +392,14 @@ export default function ChatPage() {
   const handleDesignCQuestion = (q, category) => {
     // Mark this exact question string as clicked
     setClickedQuestions(prev => new Set(prev).add(q))
-    
+
     let promptText = ""
     if (category === "tellsYou") {
       promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question, and also tell me the answer.`
     } else {
       promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
     }
-    
+
     handleSend(promptText)
   }
 
@@ -416,7 +418,7 @@ export default function ChatPage() {
   const unclickedDesignBOptions = activeDesignBOptions.filter(opt => !clickedQuestions.has(opt));
 
   return (
-    <div style={{ display: "flex", gap: 12, height: "80vh", padding: 12, paddingTop: 30 }}>
+    <div style={{ display: "flex", gap: 12, height: "100%", padding: 12 }}>
 
       {/* Left side: Instance editor, Checklist, Dashboard */}
       <div
@@ -439,53 +441,91 @@ export default function ChatPage() {
           <InstanceEditor instanceId={userInstanceId} />
         </div>
 
-        {/* Explanations Selection Panel */}
+        {/* Explanations Selection Panel (COLLAPSIBLE) */}
         <div
           style={{
             border: "1px solid #ddd",
             borderRadius: 8,
             background: "#fafafa",
-            padding: "12px 16px",
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 13, color: "#475569", marginBottom: 8 }}>
-            Explanations to display (for focus group activities)
+          {/* Clickable Header */}
+          <div
+            onClick={() => setShowExplanationsMenu(!showExplanationsMenu)}
+            style={{
+              padding: "12px 16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              cursor: "pointer",
+              userSelect: "none"
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 13, color: "#475569" }}>
+              Explanations to display (for focus group activities)
+            </div>
+
+            {/* Chevron Icon */}
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#475569"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{
+                transform: showExplanationsMenu ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s ease"
+              }}
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={selectedExplanations.includes("local")}
-                onChange={() => handleToggleExplanation("local")}
-              />
-              Local Feature Importance
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={selectedExplanations.includes("counterfactual")}
-                onChange={() => handleToggleExplanation("counterfactual")}
-              />
-              Counterfactual Explanation
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={selectedExplanations.includes("cp")}
-                onChange={() => handleToggleExplanation("cp")}
-              />
-              Ceteris Paribus (What-If) Plots
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={selectedExplanations.includes("global")}
-                onChange={() => handleToggleExplanation("global")}
-              />
-              Global Feature Importance
-            </label>
-            
-          </div>
+
+          {/* Collapsible Content */}
+          {showExplanationsMenu && (
+            <div style={{
+              padding: "0px 16px 12px 16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6
+            }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedExplanations.includes("local")}
+                  onChange={() => handleToggleExplanation("local")}
+                />
+                Local Feature Importance
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedExplanations.includes("counterfactual")}
+                  onChange={() => handleToggleExplanation("counterfactual")}
+                />
+                Counterfactual Explanation
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedExplanations.includes("cp")}
+                  onChange={() => handleToggleExplanation("cp")}
+                />
+                Ceteris Paribus (What-If) Plots
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedExplanations.includes("global")}
+                  onChange={() => handleToggleExplanation("global")}
+                />
+                Global Feature Importance
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Dashboard */}
@@ -592,7 +632,6 @@ export default function ChatPage() {
                 animation: "fadeSlide 0.4s ease forwards",
                 zIndex: 10,
               } : {
-                // Not initial state: show at bottom
                 width: "80%",
                 maxWidth: 450,
                 margin: "20px auto 0 auto",
@@ -607,7 +646,7 @@ export default function ChatPage() {
               }}
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                
+
                 {/* Category 1: What this tells you */}
                 {activeDesignCTellsYou.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -622,10 +661,10 @@ export default function ChatPage() {
                             key={idx}
                             onClick={() => handleDesignCQuestion(q, "tellsYou")}
                             className="suggestion-btn"
-                            style={{ 
-                              display: "flex", 
-                              alignItems: "flex-start", 
-                              gap: "12px", 
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "12px",
                               textAlign: "left",
                               padding: "8px 16px",
                               color: isClicked ? "#9ca3af" : undefined,
@@ -666,10 +705,10 @@ export default function ChatPage() {
                             key={idx}
                             onClick={() => handleDesignCQuestion(q, "doesntTellYou")}
                             className="suggestion-btn"
-                            style={{ 
-                              display: "flex", 
-                              alignItems: "flex-start", 
-                              gap: "12px", 
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "12px",
                               textAlign: "left",
                               padding: "8px 16px",
                               color: isClicked ? "#9ca3af" : undefined,
@@ -752,7 +791,7 @@ export default function ChatPage() {
                   What else do you think this explanation can tell you?
                 </div>
               )}
-              
+
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {unclickedDesignBOptions.map((opt, idx) => (
                   <div
@@ -760,7 +799,7 @@ export default function ChatPage() {
                     onClick={() => {
                       // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
-                      
+
                       let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What else do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
                       handleSend(promptText);
                     }}
@@ -772,43 +811,6 @@ export default function ChatPage() {
               </div>
             </div>
           )}
-
-          {/* Initial Only Box for Design A */}
-          {/* {showInitialSuggestions && activeDesign === "A" && (
-            <div
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "80%",
-                maxWidth: 450,
-                background: "white",
-                borderRadius: 16,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                border: "1px solid #e5e7eb",
-                padding: 24,
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-                animation: "fadeSlide 0.4s ease forwards",
-                zIndex: 10,
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
-                Which question would you like this explanation to help answer?
-              </div>
-              {DESIGN_A_QUESTIONS.map((q, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => handleSend(q)}
-                  className="suggestion-btn"
-                >
-                  {q}
-                </div>
-              ))}
-            </div>
-          )} */}
 
           <div ref={messagesEndRef} />
         </div>

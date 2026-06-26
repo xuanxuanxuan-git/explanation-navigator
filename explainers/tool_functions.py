@@ -410,7 +410,7 @@ def get_average_prediction(source: str = "all", indices=None):
             return {"data": "No valid indices provided.", "visualisation": None}
         X = X_scaled[idx]
     else:
-        return {"data": f"Unknown source='{source}'. Use 'test' or 'indices'.", "visualisation": None}
+        return {"data": f"Unknown source='{source}'. Use 'all' or 'indices'.", "visualisation": None}
 
     preds = model.predict_proba(X)[:, 0]*100
     avg = float(np.mean(preds))
@@ -423,7 +423,7 @@ def get_average_prediction(source: str = "all", indices=None):
         "visualisation": None,
     }
 
-def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
+def get_cp_plot(instance_id: int, feature: str, grid_points: int = 101):
     _init_if_needed()
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
@@ -488,6 +488,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
                 "font": {"size": 16},
                 "y": 0.9,
             },
+            height=280,
             xaxis={"title": feature, "range": [x_min, x_max], "gridcolor": "white"},
             yaxis={"title": "Credit score", "title_standoff": 5,           
                 "range": [0, 100],      
@@ -508,8 +509,8 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 100):
             "instance_id": instance_id,
             "feature": feature,
             "base_value": base_val,
-            "sampled_values": [round(v, 2) for v in grid.tolist()],
-            "prediction": [round(p, 2) for p in preds],
+            "sampled_values": [round(v, 1) for v in grid.tolist()],
+            "prediction": [round(p, 1) for p in preds],
         },
         "visualisation": _plotly_payload(fig, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
@@ -644,7 +645,7 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
         "visualisation": _plotly_payload(fig, meta={"tool": "generate_all_cp_plots", "instance_id": instance_id}),
     }
 
-def get_partial_dependence_plot(feature: str, grid_points: int = 150):
+def get_partial_dependence_plot(feature: str, grid_points: int = 101):
     """
     Generate Partial Dependence Plot (PDP) for a feature.
 
@@ -708,18 +709,23 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
             y=pdp_values,
             mode="lines",
             line={"color": "#2563eb"},
-            name="PDP",
             hovertemplate=f"{feature}: %{{x:.2f}}<br>Avg Prediction: %{{y:.0f}}<extra></extra>",
+            showlegend=False,
         )
     )
 
     fig.update_layout(
-        title=f"Average effect of {feature}",
-        xaxis={"title": feature, "range": [x_min, x_max]},
-        yaxis={"title": "Average score", "range": [0, 100]},
-        margin={"l": 60, "r": 20, "t": 55, "b": 40},
+        title={
+            "text": f"Average effect of {feature}<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How this factor affects the average predicted score</span>",
+            "font": {"size": 16},
+            "y": 0.9,
+        },
+        xaxis={"title": feature, "range": [x_min, x_max], "gridcolor": "white"},
+        yaxis={"title": "Average score", "title_standoff": 5, "range": [0, 100]},
+        margin={"l": 60, "r": 30, "t": 73, "b": 40},
     )
-        # Update y-axis to strictly use specific tickvals
+    
+    # Update y-axis to strictly use specific tickvals
     fig.update_yaxes(
         range=[0, 100], 
         tickmode="array",
@@ -730,7 +736,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 150):
     return {
         "data": {
             "feature": feature,
-            "sampled_values": [round(v, 2) for v in grid.tolist()],
+            "sampled_values": [round(v, 1) for v in grid.tolist()],
             "prediction": [int(round(p)) for p in pdp_values.tolist()],
         },
         "visualisation": _plotly_payload(
@@ -756,9 +762,9 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     _check_instance_id(instance_id)
 
     X_test = _STATE["X_test"]
-    X_train = _STATE["X_train"]
     scaler = _STATE["scaler"]
     model = _STATE["model"]
+    feature_ranges_state = _STATE["feature_ranges"] 
 
     x0 = X_test.iloc[[instance_id]].copy()
     x_cf = x0.copy()
@@ -770,18 +776,8 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     if target is None:
         target=50
         default_target = True
-        # return {
-        #     "error": "Target score is required. Please specify a desired score."
-        # }
 
     feature_names = X_test.columns.tolist()
-
-    # Precompute feature ranges
-    feature_ranges = {
-        f: (float(X_train[f].min()), float(X_train[f].max()))
-        for f in feature_names
-    }
-
     current_pred = original_pred
 
     # ---------- GREEDY SEARCH ----------
@@ -792,7 +788,8 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         best_pred = current_pred
 
         for f in feature_names:
-            min_v, max_v = feature_ranges[f]
+            min_v = float(feature_ranges_state.get(f).get("min"))
+            max_v = float(feature_ranges_state.get(f).get("max"))
 
             # try small steps in both directions
             candidates = np.linspace(min_v, max_v, 20)
@@ -841,17 +838,10 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
 
     features = feature_names  # show ALL features
 
-    # --- Robust feature ranges (NOT skewed by outliers) ---
-    feature_ranges = {
-        f: (
-            float(X_train[f].quantile(0.01)),
-            float(X_train[f].quantile(0.99))
-        )
-        for f in features
-    }
-
     def scale(v, f):
-        min_v, max_v = feature_ranges[f]
+        min_v = float(feature_ranges_state.get(f).get("min"))
+        max_v = float(feature_ranges_state.get(f).get("max"))
+        
         if max_v - min_v < 1e-9:
             return 0.5  # constant feature safeguard
         # clip to avoid going outside range
@@ -892,9 +882,9 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 axref="x",
                 ayref="y",
                 showarrow=True,
-                arrowhead=2,
-                arrowsize=1.2,
-                arrowwidth=2,
+                arrowhead=1,
+                arrowsize=1.5,
+                arrowwidth=1.5,
                 arrowcolor="rgba(99,102,241,0.9)",
                 opacity=0.9
             )
@@ -918,7 +908,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
                 showlegend=False
             ))
 
-        # --- original point ---
+        # --- original point (the black horizontal line) ---
         fig.add_trace(go.Scatter(
             x=[f],
             y=[v0],
@@ -944,9 +934,17 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             showlegend=False
         ))
 
+    # Dynamic main title reflecting the target score
+    target_display = int(round(target))
+    
     fig.update_layout(
-        title=f"How to improve your score",
-        margin={"l": 40, "r": 20, "t": 50, "b": 120},
+        title={
+            "text": f"How to improve your score to {target_display}<br><span style='font-size: 13px; color: gray; font-weight: normal;'>The smallest changes needed to reach the target score</span>",
+            "y": 0.93,      
+            "x": 0.05, 
+        },
+        # Increased 't' (top margin) to accommodate subtitle
+        margin={"l": 40, "r": 20, "t": 65, "b": 120},
         template="plotly_white",
         showlegend=False,
     )
@@ -964,7 +962,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
             "target": target,
             "num_features_changed": len(changes),
             "changes": changes,
-            "system_reminder": "The user did not specify a target score. You MUST explicitly inform the user that a default target of 50 was assumed." if default_target else "Emphasise that all changes need to be applied together."
+            "system_reminder": "The user did not specify a target score. You MUST explicitly inform the user that a default target of 50 was assumed." if default_target else ""
         },
         "visualisation": _plotly_payload(
             fig,
@@ -1219,10 +1217,10 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     for col in X_train.columns:
         s = X_train[col].values  
         feature_stats[col] = {
-            "mean": round(float(np.mean(s)), 3),
-            "min": round(float(np.min(s)), 3),
-            "max": round(float(np.max(s)), 3),
-            "std": round(float(np.std(s)), 3),
+            "mean": round(float(np.mean(s)), 0),
+            "min": round(float(np.min(s)), 0),
+            "max": round(float(np.max(s)), 0),
+            "std": round(float(np.std(s)), 0),
         }
 
     data = {
@@ -1232,10 +1230,10 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         "features": X_train.columns.tolist(),
         "target": "Credit score",
         "target_statistics": {
-            "mean": round(float(np.mean(y_train)), 3),
-            "min": round(float(np.min(y_train)), 3),
-            "max": round(float(np.max(y_train)), 3),
-            "std": round(float(np.std(y_train)), 3),
+            "mean": round(float(np.mean(y_train)), 0),
+            "min": round(float(np.min(y_train)), 0),
+            "max": round(float(np.max(y_train)), 0),
+            "std": round(float(np.std(y_train)), 0),
         },
         "feature_statistics": feature_stats,
     }
@@ -1270,7 +1268,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
             nbinsx=int(bins),
             marker=dict(color="#93c5fd"),
             opacity=0.85,
-            hovertemplate=f"{feature}: %{{x:.2f}}<br>Count: %{{y}}<extra></extra>",
+            hovertemplate=f"{feature}: %{{x:.0f}}<br>Count: %{{y}}<extra></extra>",
         ))
 
         # Mean line
@@ -1286,8 +1284,10 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
             y=0.8,
             xref="x",
             yref="paper",
-            text=f"Mean: {mean_val:.2f}",
+            text=f"Mean: {mean_val:.0f}",
             showarrow=False,
+            xanchor="left",
+            xshift=5,
         )
 
         if instance_value is not None:
@@ -1296,16 +1296,23 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
                 line_width=3,
                 line_dash="dash",
                 line_color="#ef4444",
-                annotation_text=f"Your {feature}: {instance_value:.2f}",
+                annotation_text=f"Your {feature}: {instance_value:.0f}",
                 annotation_position="top right",
             )
 
         fig.update_layout(
-            title=f"{feature} distribution",
-            xaxis_title=feature,
-            yaxis_title="Count",
+            title={
+                "text": f"{feature} distribution<br><span style='font-size: 13px; color: gray; font-weight: normal;'>How this factor is distributed across all applicants</span>",
+                "font": {"size": 16},
+                "y": 0.9,
+                "yanchor": "top",
+                "x": 0.05,
+            },
+            xaxis={"title": feature, "gridcolor": "white"},
+            yaxis={"title": "No of applicants", "gridcolor": "white"},
             bargap=0.05,
-            margin={"l": 40, "r": 20, "t": 50, "b": 40},
+            # Increased top margin to fit the subtitle
+            margin={"l": 60, "r": 20, "t": 70, "b": 20},
             showlegend=False,
         )
 
