@@ -127,7 +127,7 @@ const generateWelcomeMessage = (explanations) => {
 };
 
 export default function ChatPage() {
-  const [userInstanceId] = useState(52)
+  const [userInstanceId] = useState(57)
 
   // Track the list of explanations the user wants to see in the dashboard
   const [selectedExplanations, setSelectedExplanations] = useState([

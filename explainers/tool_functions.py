@@ -228,7 +228,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
                 dict(
                     x=0, y=1.15, 
                     xref="x", yref="paper",
-                    text="<span style='font-size: 14px;'>←</span> Decrease Score",
+                    text="<span style='font-size: 14px;'>←</span> Decrease by",
                     showarrow=False,
                     xanchor="right",
                     xshift=-5,
@@ -237,7 +237,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
                 dict(
                     x=0, y=1.15, 
                     xref="x", yref="paper",
-                    text="Increase Score <span style='font-size: 14px;'>→</span>",
+                    text="Increase by <span style='font-size: 14px;'>→</span>",
                     showarrow=False,
                     xanchor="left",
                     xshift=5,
@@ -308,7 +308,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
             orientation="h",
             marker={"color": ["#10b981"] * len(x)},
             customdata=y,
-            hovertemplate="Factor: %{y}<br>Importance: %{x:.1f}<extra></extra>",
+            hovertemplate="Factor: %{y}<br>Impact: %{x:.1f}<extra></extra>",
         )],
         layout=go.Layout(
             title={
@@ -317,7 +317,7 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
                 "x": 0.05, 
             },
             xaxis={"title": {
-                    "text": "Overall importance level",
+                    "text": "Average impact on score",
                     "font": {"size": 12} 
                 }},
             yaxis={
