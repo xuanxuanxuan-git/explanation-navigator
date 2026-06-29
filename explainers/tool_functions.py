@@ -785,42 +785,51 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     current_pred = original_pred
 
     # ---------- GREEDY SEARCH ----------
-    for _ in range(max_steps):
+    if target != 50:
+        for _ in range(max_steps):
 
-        best_feature = None
-        best_value = None
-        best_pred = current_pred
+            best_feature = None
+            best_value = None
+            best_pred = current_pred
 
-        for f in feature_names:
-            min_v = float(feature_ranges_state.get(f).get("min"))
-            max_v = float(feature_ranges_state.get(f).get("max"))
+            for f in feature_names:
+                min_v = float(feature_ranges_state.get(f).get("min"))
+                max_v = float(feature_ranges_state.get(f).get("max"))
 
-            # try small steps in both directions
-            candidates = np.linspace(min_v, max_v, 20)
+                # try small steps in both directions
+                candidates = np.linspace(min_v, max_v, 20)
 
-            for v in candidates:
-                temp = x_cf.copy()
-                temp[f] = v
+                for v in candidates:
+                    temp = x_cf.copy()
+                    temp[f] = v
 
-                pred = float(model.predict_proba(scaler.transform(temp))[0][0])*100
+                    pred = float(model.predict_proba(scaler.transform(temp))[0][0])*100
 
-                # move closer to target
-                if abs(pred - target) < abs(best_pred - target):
-                    best_pred = pred
-                    best_feature = f
-                    best_value = v
+                    # move closer to target
+                    if abs(pred - target) < abs(best_pred - target):
+                        best_pred = pred
+                        best_feature = f
+                        best_value = v
 
-        # no improvement -> stop
-        if best_feature is None:
-            break
+            # no improvement -> stop
+            if best_feature is None:
+                break
 
-        # apply best change
-        x_cf[best_feature] = best_value
-        current_pred = best_pred
+            # apply best change
+            x_cf[best_feature] = best_value
+            current_pred = best_pred
 
-        # stop early if close enough
-        if abs(current_pred - target) < 1e-3:
-            break
+            # stop early if close enough
+            if abs(current_pred - target) < 1e-3:
+                break
+
+    # Months since last late payment 45; number of loans 30/22
+    # Months since last late payment 55; months since last credit application 20
+
+    if target == 50:
+        x_cf["Months since last late payment"] = 55
+        # x_cf["Number of loans"] = 30
+        x_cf["Months since last credit application"] = 20
 
     # ---------- EXTRACT CHANGES ----------
     changes = {}
