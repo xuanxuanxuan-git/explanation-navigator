@@ -114,7 +114,11 @@ def _plotly_payload(fig, *, config=None, meta=None):
     default_config = {
         "displayModeBar": True,              # Show the bar
         "modeBarButtons": [["toImage"]],     # ONLY show the save image button
-        "displaylogo": False                 # Hide the Plotly logo
+        "displaylogo": False,                 # Hide the Plotly logo
+        "toImageButtonOptions": {            # Configure image export quality
+            "format": "png",                 # Image format (png, jpeg, webp, svg)
+            "scale": 3                       # Multiply resolution by 3 (makes it high-res)
+        }
     }
 
     if config:
@@ -170,12 +174,12 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
     rows_sorted = sorted(rows, key=lambda r: abs(r["shap_value"]), reverse=True)[:max_display]
 
     rows_sorted = [
-        {"feature": r["feature"], "shap_value": round(float(r["shap_value"]), 4)}
+        {"feature": r["feature"], "contribution": round(float(r["shap_value"]), 2)}
         for r in rows_sorted
     ]
     # For horizontal bars: feature names on Y, SHAP values on X
     features = [r["feature"] for r in rows_sorted][::-1]
-    values = [r["shap_value"] for r in rows_sorted][::-1]
+    values = [r["contribution"] for r in rows_sorted][::-1]
     colors = ["#ef4444" if v <= 0 else "#3b82f6" for v in values]
 
     # Calculate range padding to prevent outside text from overlapping the y-axis labels
@@ -290,12 +294,12 @@ def generate_shap_summary_plot(source: str = "all", indices=None, max_display: i
 
     mean_abs = np.mean(np.abs(shap_subset), axis=0)
 
-    rows = [{"feature": f, "mean_abs_shap": float(v)} for f, v in zip(feature_names, mean_abs)]
-    rows_sorted = sorted(rows, key=lambda r: r["mean_abs_shap"], reverse=True)[:max_display]
-    rows_sorted = [{"feature": r["feature"], "mean_abs_shap": round(float(r["mean_abs_shap"]), 4)} for r in rows_sorted]
+    rows = [{"feature": f, "importance": float(v)} for f, v in zip(feature_names, mean_abs)]
+    rows_sorted = sorted(rows, key=lambda r: r["importance"], reverse=True)[:max_display]
+    rows_sorted = [{"feature": r["feature"], "importance": round(float(r["importance"]), 2)} for r in rows_sorted]
 
     y = [r["feature"] for r in rows_sorted][::-1]
-    x = [r["mean_abs_shap"] for r in rows_sorted][::-1]
+    x = [r["importance"] for r in rows_sorted][::-1]
 
     # Dynamic Main Title and Subtitle based on the source
     main_title = "What mattered most overall" if source == "all" else "What mattered most across selected subgroup"
@@ -629,7 +633,7 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
     # Format the overall layout with subtitle and consistent spacing
     fig.update_layout(
         title={
-            "text": "What-If Scenarios<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How changing a single factor changes your score</span>",
+            "text": "How each factor affects your score<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How changing a single factor changes your score</span>",
             "y": 0.94,
             "x": 0.05,
         },

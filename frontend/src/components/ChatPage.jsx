@@ -19,25 +19,25 @@ const DESIGN_B_CONTENT = {
   options: {
     local: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can improve my score",
+      "Increasing \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     counterfactual: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can improve my score",
+      "Increasing \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     global: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can improve my score",
+      "Increasing \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     cp: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can improve my score",
+      "Increasing \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
@@ -48,45 +48,45 @@ const DESIGN_B_CONTENT = {
 const DESIGN_C_QUESTIONS = {
   local: {
     tellsYou: [
-      "What factors lowered my score?",
-      "How much did a factor impact my score?",
+      "What factors lowered/increased my score?",
+      "How much did a factor affect my score?",
     ],
     doesntTellYou: [
       "What can I do to improve my score to 50?",
-      "How the model behaves overall",
-      "Increasing \"on-time payment rate\" can improve my score",
+      "Which factors are generally important across all applicants?",
+      "How would my score change if I have fewer loans?",
     ]
   },
   counterfactual: {
     tellsYou: [
-      "What is the minimum change to get approved?",
+      "What is the smallest change needed to get approved?",
     ],
     doesntTellYou: [
       "Why was my original score so low?",
-      "Decreasing \"credit used\" alone can improve my score",
-      "My \"Loans not paid off\" negatively affects my score"
+      "Would decreasing my credit usage alone increase my score?",
+      "Did my \"Loans not paid off\" negatively affect my score?"
     ]
   },
   global: {
     tellsYou: [
-      "What factor does the system care about the most?",
-      "Is \"credit used\" generally important for everyone?",
+      "Which factors matter the most to the system in general?",
+      "Does the model generally prioritise late payments or credit usage?",
     ],
     doesntTellYou: [
-      "What can I do to improve my personal score?",
+      "What changes should I make to improve my score?",
       "Why was my specific application denied?",
       "How much did \"credit used\" impact my score?",
     ]
   },
   cp: {
     tellsYou: [
-      "What happens if I change just one specific factor?",
-      "How sensitive is my score to a factor?"
+      "How would my score change if I increased one factor?",
+      "How sensitive is my score to each factor?"
     ],
     doesntTellYou: [
-      "Why did I get this score originally?",
-      "Which factor is the most important?",
-      "What is the minimum change to get approved?",
+      "Why did I receive this score?",
+      "Which factor affected my current score the most?",
+      "What is the smallest change needed to get approved?",
     ]
   }
 }
@@ -96,17 +96,17 @@ const EXPLANATION_DICT = {
   local: {
     system: "Which factors pushed the applicant's score up or down (local feature importance)",
     ui: "What Affected Your Score",
-    description: "how each factor positively or negatively impacted your score"
+    description: "how much each factor increased or decreased your score"
   },
   counterfactual: {
-    system: "Smallest set of changes needed for the current applicant",
+    system: "Smallest set of changes needed for the current applicant to reach target score",
     ui: "How to Improve Your Score",
     description: "the smallest change you could make to reach the target score"
   },
   cp: {
     system: "How one applicant's predicted credit score changes when changing a single factor",
-    ui: "What-If Scenarios",
-    description: "how changing a single factor would change your score"
+    ui: "How Each Factor Affects Your Score",
+    description: "how changing one factor at a time would affect your score"
   },
   global: {
     system: "Which factors matter the most across everyone",
@@ -122,7 +122,7 @@ const generateWelcomeMessage = (explanations) => {
   }
   const descText = explanations
     .map(k => `**${EXPLANATION_DICT[k].ui}**, which shows ${EXPLANATION_DICT[k].description}`)
-    .join(" and ");
+    .join(", and ");
   return `The interface currently displays ${descText}. Let me know if you have any questions.`;
 };
 
@@ -462,7 +462,7 @@ export default function ChatPage() {
             }}
           >
             <div style={{ fontWeight: 600, fontSize: 13, color: "#475569" }}>
-              Explanations to display (for focus group activities)
+              Explanations to display
             </div>
 
             {/* Chevron Icon */}
@@ -492,38 +492,16 @@ export default function ChatPage() {
               flexDirection: "column",
               gap: 6
             }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedExplanations.includes("local")}
-                  onChange={() => handleToggleExplanation("local")}
-                />
-                Local Feature Importance
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedExplanations.includes("counterfactual")}
-                  onChange={() => handleToggleExplanation("counterfactual")}
-                />
-                Counterfactual Explanation
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedExplanations.includes("cp")}
-                  onChange={() => handleToggleExplanation("cp")}
-                />
-                Ceteris Paribus (What-If) Plots
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedExplanations.includes("global")}
-                  onChange={() => handleToggleExplanation("global")}
-                />
-                Global Feature Importance
-              </label>
+              {Object.keys(EXPLANATION_DICT).map((key) => (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedExplanations.includes(key)}
+                    onChange={() => handleToggleExplanation(key)}
+                  />
+                  {EXPLANATION_DICT[key].ui}
+                </label>
+              ))}
             </div>
           )}
         </div>

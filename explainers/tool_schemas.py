@@ -113,7 +113,7 @@ explainer_tools = [
         "type": "function",
         "name": "generate_global_subgroup_shap_plot",
         "description": """
-            Shows which factors matter the most across everyone, or across a specific group of people. 
+            Shows which factors matter the most on average, or across a specific group of people. 
             Use this when the user asks questions such as:
             - "Which factors are most important in the model?"
             - "What factors matter most overall?"

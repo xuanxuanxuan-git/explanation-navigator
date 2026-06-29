@@ -72,7 +72,7 @@ export default function MessageInput({ disabled, onSend }) {
         onKeyDown={onKeyDown}
         disabled={disabled}
         rows={1}
-        placeholder={disabled ? 'Waiting for answer...' : 'Type a message...'}
+        placeholder={disabled ? 'Waiting for answer...' : 'Ask a question'}
         style={{
           flex: 1,
           padding: '10px 12px',
