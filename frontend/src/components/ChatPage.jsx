@@ -19,25 +19,25 @@ const DESIGN_B_CONTENT = {
   options: {
     local: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can increase my score",
+      "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     counterfactual: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can increase my score",
+      "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     global: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can increase my score",
+      "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     cp: [
       "How each factor affected my score",
-      "Increasing \"on-time payment rate\" can increase my score",
+      "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
@@ -70,10 +70,10 @@ const DESIGN_C_QUESTIONS = {
   global: {
     tellsYou: [
       "Which factors matter the most to the system in general?",
-      "Does the model generally prioritise late payments or credit usage?",
+      "Does the system generally prioritise late payments or credit usage?",
     ],
     doesntTellYou: [
-      "What changes should I make to improve my score?",
+      "What changes should I make to increase my score?",
       "Why was my specific application denied?",
       "How much did \"credit used\" impact my score?",
     ]
