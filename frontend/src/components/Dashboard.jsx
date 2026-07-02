@@ -315,7 +315,7 @@ export default function Dashboard({
   if (!showLocal && !showCF && !showGlobal && !showCP && !hasExtra) {
     return (
       <div style={{ padding: 20, color: "#6b7280", textAlign: "center", fontSize: 13 }}>
-        No explanations selected. Please check options on the left.
+        No explanations selected. Please check options above.
       </div>
     );
   }
