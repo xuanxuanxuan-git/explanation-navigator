@@ -456,6 +456,7 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 101):
         xv[feature] = v
         preds.append(float(model.predict_proba(scaler.transform(xv))[0][0])*100)
     base_pred = float(model.predict_proba(scaler.transform(x0))[0][0]*100)
+    
     fig = go.Figure(
         data=[
             # y=50 line (for consistency with the 'all cp plots' view)
@@ -508,13 +509,22 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 101):
         gridcolor="white", # Contrasts with blue background
     )
     
+    # Format data for LLM: Slice the pre-calculated arrays to get every 5th points
+    llm_grid = grid.tolist()[::5]
+    llm_preds = preds[::5]
+    
+    llm_data_points = [
+        {"value": round(v, 1), "score": round(p, 1)}
+        for v, p in zip(llm_grid, llm_preds)
+    ]
+    
     return {
         "data": {
             "instance_id": instance_id,
             "feature": feature,
-            "base_value": base_val,
-            "sampled_values": [round(v, 1) for v in grid.tolist()],
-            "prediction": [round(p, 1) for p in preds],
+            "current_value": round(base_val, 1),
+            "current_predicted_score": round(base_pred, 1),
+            "trend_data": llm_data_points # Passed as explicit pairs to prevent LLM hallucination
         },
         "visualisation": _plotly_payload(fig, meta={"tool": "get_cp_plot", "instance_id": instance_id, "feature": feature}),
     }
