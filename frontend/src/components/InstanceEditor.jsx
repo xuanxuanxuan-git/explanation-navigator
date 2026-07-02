@@ -316,7 +316,8 @@ export default function InstanceEditor({ instanceId }) {
       </div>
 
       {/* Buttons */}
-      <div style={{ display: "flex", gap: 8 }}>
+      {/* comment out to remove buttons */}
+      {/* <div style={{ display: "flex", gap: 8 }}>
         <button
           onClick={handleRecalculate}
           disabled={loading || !Object.keys(changedFields).length}
@@ -352,7 +353,7 @@ export default function InstanceEditor({ instanceId }) {
         >
           Reset
         </button>
-      </div>
+      </div> */}
     </div>
   )
 }
