@@ -52,12 +52,19 @@ export default function Dashboard({
   visualisations = [],
   counterfactualViz,
   cpVisualisations = [], // Data from chat stream (if LLM proactively calls it)
-  selectedExplanations = []
+  selectedExplanation = "" //[]
 }) {
-  const showLocal = selectedExplanations.includes("local");
-  const showCF = selectedExplanations.includes("counterfactual");
-  const showGlobal = selectedExplanations.includes("global");
-  const showCP = selectedExplanations.includes("cp");
+  //multiple choices
+  // const showLocal = selectedExplanations.includes("local");
+  // const showCF = selectedExplanations.includes("counterfactual");
+  // const showGlobal = selectedExplanations.includes("global");
+  // const showCP = selectedExplanations.includes("cp");
+
+  const showLocal = selectedExplanation === "local";
+  const showCF = selectedExplanation === "counterfactual";
+  const showGlobal = selectedExplanation === "global";
+  const showCP = selectedExplanation === "cp";
+
 
   /* SHAP state */
   const [shapViz, setShapViz] = useState(null)

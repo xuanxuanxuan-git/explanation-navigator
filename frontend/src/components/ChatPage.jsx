@@ -108,43 +108,39 @@ const EXPLANATION_DICT = {
     ui: "How Each Factor Affects Your Score",
     description: "how changing one factor at a time would affect your score"
   },
-  global: {
-    system: "Which factors matter the most across everyone",
-    ui: "What Mattered Most Overall",
-    description: "how important each factor is across all applicants"
-  },
+  // global: {
+  //   system: "Which factors matter the most across everyone",
+  //   ui: "What Mattered Most Overall",
+  //   description: "how important each factor is across all applicants"
+  // },
 }
 
-// Helper to dynamically generate the welcome message based on selected/clicked explanations
-const generateWelcomeMessage = (explanations) => {
-  if (explanations.length === 0) {
-    return "The interface currently displays no explanations. Let me know if you have any questions.";
+// Helper to dynamically generate the welcome message based on the selected explanation
+const generateWelcomeMessage = (explanationKey) => {
+  if (!explanationKey) {
+    return "The interface currently displays no explanation. Please select an explanation from the menu to begin.";
   }
-  const descText = explanations
-    .map(k => `**${EXPLANATION_DICT[k].ui}**, which shows ${EXPLANATION_DICT[k].description}`)
-    .join(", and ");
-  return `The interface currently displays ${descText}. Let me know if you have any questions.`;
+  const info = EXPLANATION_DICT[explanationKey];
+  return `The interface currently displays **${info.ui}**, which shows ${info.description}. Let me know if you have any questions.`;
 };
 
 export default function ChatPage() {
   const [userInstanceId] = useState(57)
 
-  // Track the list of explanations the user wants to see in the dashboard
-  const [selectedExplanations, setSelectedExplanations] = useState([
-    "local",
-  ])
+  // Start with no explanation selected so the user is forced to pick one.
+  const [selectedExplanation, setSelectedExplanation] = useState("")
 
-  // NEW: Track whether the explanations menu is collapsed or expanded
+  // Track whether the explanations menu is collapsed or expanded
   const [showExplanationsMenu, setShowExplanationsMenu] = useState(true)
 
   // Track which Design C and Design B questions have been clicked
   const [clickedQuestions, setClickedQuestions] = useState(new Set())
 
-  // Initialise messages dynamically using the helper function
+  // Initialise with an empty string so the welcome message prompts selection.
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: generateWelcomeMessage(["local"])
+      content: generateWelcomeMessage("")
     }
   ])
 
@@ -159,23 +155,21 @@ export default function ChatPage() {
   const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
   const messagesEndRef = useRef(null)
 
-  // Keep a ref of the selected explanations to safely access inside async callbacks
-  const selectedExpsRef = useRef(selectedExplanations)
+  // Keep a ref of the selected explanation to safely access inside async callbacks
+  const selectedExpRef = useRef(selectedExplanation)
   useEffect(() => {
-    selectedExpsRef.current = selectedExplanations
-  }, [selectedExplanations])
+    selectedExpRef.current = selectedExplanation
+  }, [selectedExplanation])
 
   // Update the initial message if the user clicks/toggles dashboard explanations BEFORE asking a question
   useEffect(() => {
     setMessages(prev => {
-      // If the user has already sent a message, don't overwrite the chat history
       const hasUserMsg = prev.some(m => m.role === 'user');
       if (hasUserMsg) return prev;
 
-      // Re-generate the message based on exactly what is clicked right now
-      return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanations) }];
+      return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanation) }];
     });
-  }, [selectedExplanations]);
+  }, [selectedExplanation]);
 
   // Start a new log session on initial page load / refresh
   useEffect(() => {
@@ -190,61 +184,46 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, busy])
 
-  // Dynamically build the text describing what's visible, reusing the mapping
+  // Dynamically build the text describing what's visible
   const visibleTexts = useMemo(() => {
-    if (selectedExplanations.length === 0) {
+    if (!selectedExplanation) {
       return {
         system: "No explanations currently visible",
-        ui: "no explanations"
+        ui: "no explanation"
       }
     }
     return {
-      system: selectedExplanations.map(k => EXPLANATION_DICT[k].system).join(", "),
-      ui: selectedExplanations.map(k => EXPLANATION_DICT[k].ui).join(" and ")
+      system: EXPLANATION_DICT[selectedExplanation].system,
+      ui: EXPLANATION_DICT[selectedExplanation].ui
     }
-  }, [selectedExplanations])
+  }, [selectedExplanation])
 
-  // Dynamically compile Design B options based on selected explanations
+  // Dynamically compile Design B options based on the selected explanation
   const activeDesignBOptions = useMemo(() => {
-    const options = new Set();
-    selectedExplanations.forEach(exp => {
-      if (DESIGN_B_CONTENT.options[exp]) {
-        DESIGN_B_CONTENT.options[exp].forEach(opt => options.add(opt));
-      }
-    });
-    return Array.from(options);
-  }, [selectedExplanations]);
+    if (!selectedExplanation || !DESIGN_B_CONTENT.options[selectedExplanation]) return [];
+    return DESIGN_B_CONTENT.options[selectedExplanation];
+  }, [selectedExplanation]);
 
   // Dynamically compile Design C "tells you" questions
   const activeDesignCTellsYou = useMemo(() => {
-    const questions = new Set();
-    selectedExplanations.forEach(exp => {
-      if (DESIGN_C_QUESTIONS[exp]?.tellsYou) {
-        DESIGN_C_QUESTIONS[exp].tellsYou.forEach(q => questions.add(q));
-      }
-    });
-    return Array.from(questions);
-  }, [selectedExplanations]);
+    if (!selectedExplanation || !DESIGN_C_QUESTIONS[selectedExplanation]?.tellsYou) return [];
+    return DESIGN_C_QUESTIONS[selectedExplanation].tellsYou;
+  }, [selectedExplanation]);
 
   // Dynamically compile Design C "doesn't tell you" questions
   const activeDesignCDoesntTellYou = useMemo(() => {
-    const questions = new Set();
-    selectedExplanations.forEach(exp => {
-      if (DESIGN_C_QUESTIONS[exp]?.doesntTellYou) {
-        DESIGN_C_QUESTIONS[exp].doesntTellYou.forEach(q => questions.add(q));
-      }
-    });
-    return Array.from(questions);
-  }, [selectedExplanations]);
+    if (!selectedExplanation || !DESIGN_C_QUESTIONS[selectedExplanation]?.doesntTellYou) return [];
+    return DESIGN_C_QUESTIONS[selectedExplanation].doesntTellYou;
+  }, [selectedExplanation]);
 
   // The system prompt dynamically reads the current dashboard state.
   const system = useMemo(() => {
     return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} in the dataset who are apply to increase their credit limit. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit limit increase.
 
-      Currently, the user has the following explanations visible on their dashboard:
+      Currently, the user has the following explanation visible on their dashboard:
       [ ${visibleTexts.system} ]
-      If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to these visible panels. Contextualise your answers based on what they can see. 
-      IMPORTANT: Even though these explanations are displayed to the user, you do NOT automatically know what the actual data or results are. You MUST call the corresponding tool(s) to retrieve the data for these visible explanations so you can accurately understand the outputs and answer the user's questions. 
+      If the user refers to "this explanation", "the chart", "the figure" or similar phrases, they are referring to this visible panel. Contextualise your answers based on what they can see. 
+      IMPORTANT: Even though this explanation is displayed to the user, you do NOT automatically know what the actual data or results are. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Available factors/features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
@@ -260,7 +239,7 @@ export default function ChatPage() {
       - Do not guess or hallucinate the explanation results. Do not add your own interpretation!
       - If required inputs (e.g., instance_id, factor name, target) are missing, ask the user to provide them.
       - Clearly distinguish between advice for a single applicant versus trends for EVERYONE (global).
-      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation(s), and the true answer requires a DIFFERENT explanation(s) that is not currently shown (e.g., they ask how to improve their score, but are looking at their current score breakdown), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate the correct explanation in your response. Do not just tell them another explanation is needed.`
+      - PROACTIVE TOOL CALLING: If the user asks whether they can infer certain information from the currently shown explanation, and the true answer requires a DIFFERENT explanation that is not currently shown (e.g., they ask how to improve their score, but are looking at their current score breakdown), you MUST explain why the current explanation is insufficient and then IMMEDIATELY call the appropriate tool to generate the correct explanation in your response. Do not just tell them another explanation is needed.`
   }, [userInstanceId, visibleTexts.system])
 
   async function handleSend(text) {
@@ -344,7 +323,7 @@ export default function ChatPage() {
 
           // If the explanation is NOT currently selected in the dashboard checklist, 
           // or it's an "extra" figure, display it inline in the chat message
-          if (!selectedExpsRef.current.includes(vizType) || vizType === "extra") {
+          if (selectedExpRef.current !== vizType || vizType === "extra") {
             inlineVizes.push(v)
           }
         })
@@ -395,9 +374,9 @@ export default function ChatPage() {
 
     let promptText = ""
     if (category === "tellsYou") {
-      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question, and also tell me the answer.`
+      promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question, and also tell me the answer.`
     } else {
-      promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
+      promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
     }
 
     handleSend(promptText)
@@ -408,10 +387,11 @@ export default function ChatPage() {
     !busy &&
     messages.filter(m => m.role === "user").length === 0
 
-  const handleToggleExplanation = (key) => {
-    setSelectedExplanations(prev =>
-      prev.includes(key) ? prev.filter(v => v !== key) : [...prev, key]
-    )
+  // Only allow setting the selection if it is currently empty.
+  const handleSelectExplanation = (key) => {
+    if (!selectedExplanation) {
+      setSelectedExplanation(key)
+    }
   }
 
   // Calculate unclicked Design B options
@@ -420,7 +400,7 @@ export default function ChatPage() {
   return (
     <div style={{ display: "flex", gap: 12, height: "100%", padding: 12 }}>
 
-      {/* Left side: Instance editor, Checklist, Dashboard */}
+      {/* Left side: Instance editor, Selection Panel, Dashboard */}
       <div
         style={{
           flex: 0.4,
@@ -462,7 +442,7 @@ export default function ChatPage() {
             }}
           >
             <div style={{ fontWeight: 600, fontSize: 13, color: "#475569" }}>
-              Explanations to display
+              Explanation to display
             </div>
 
             {/* Chevron Icon */}
@@ -492,16 +472,34 @@ export default function ChatPage() {
               flexDirection: "column",
               gap: 6
             }}>
-              {Object.keys(EXPLANATION_DICT).map((key) => (
-                <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedExplanations.includes(key)}
-                    onChange={() => handleToggleExplanation(key)}
-                  />
-                  {EXPLANATION_DICT[key].ui}
-                </label>
-              ))}
+              {Object.keys(EXPLANATION_DICT).map((key) => {
+                // Disable all unselected options once a choice is made
+                const isSelectionLocked = selectedExplanation !== "";
+                const isCurrentKeyLockedOut = isSelectionLocked && selectedExplanation !== key;
+                
+                return (
+                  <label 
+                    key={key} 
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: 8, 
+                      fontSize: 13, 
+                      cursor: isSelectionLocked ? "default" : "pointer",
+                      color: isCurrentKeyLockedOut ? "#9ca3af" : "inherit"
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="explanationSelection"
+                      checked={selectedExplanation === key}
+                      onChange={() => handleSelectExplanation(key)}
+                      disabled={isSelectionLocked}
+                    />
+                    {EXPLANATION_DICT[key].ui}
+                  </label>
+                )
+              })}
             </div>
           )}
         </div>
@@ -522,7 +520,7 @@ export default function ChatPage() {
             visualisations={visualisations}
             counterfactualViz={counterfactualViz}
             cpVisualisations={cpVisualisations}
-            selectedExplanations={selectedExplanations}
+            selectedExplanation={selectedExplanation}
           />
         </div>
       </div>
@@ -590,7 +588,7 @@ export default function ChatPage() {
           <MessageList messages={messages} busy={busy} status={llmStage} />
 
           {/* Persistent Box for Design C */}
-          {activeDesign === "C" && !busy && (activeDesignCTellsYou.length > 0 || activeDesignCDoesntTellYou.length > 0) && (
+          {activeDesign === "C" && !busy && selectedExplanation !== "" && (activeDesignCTellsYou.length > 0 || activeDesignCDoesntTellYou.length > 0) && (
             <div
               style={showInitialSuggestions ? {
                 position: "absolute",
@@ -721,7 +719,7 @@ export default function ChatPage() {
           )}
 
           {/* Persistent Box for Design B */}
-          {activeDesign === "B" && !busy && unclickedDesignBOptions.length > 0 && (
+          {activeDesign === "B" && !busy && selectedExplanation !== "" && unclickedDesignBOptions.length > 0 && (
             <div
               style={showInitialSuggestions ? {
                 position: "absolute",
@@ -778,7 +776,7 @@ export default function ChatPage() {
                       // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
 
-                      let promptText = `The explanation(s) currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What else do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                      let promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What else do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
                       handleSend(promptText);
                     }}
                     className="suggestion-btn"
