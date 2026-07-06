@@ -1222,7 +1222,6 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
 
 
 # TODO: show the risk prediction distribution
-# TODO: only show the feature distribution queried by the users
 # TODO: show the feature distribution of a specific user group
 def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
@@ -1236,27 +1235,26 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     X_test = _STATE["X_test"]
     y_train = _STATE["y_train"]
 
+    # Determine which columns to calculate stats for
+    # If a specific feature is requested, only calculate for that one.
+    cols_to_process = [feature] if feature and feature in X_train.columns else X_train.columns
+
     feature_stats = {}
-    for col in X_train.columns:
+    for col in cols_to_process:
         s = X_train[col].values  
         feature_stats[col] = {
             "mean": round(float(np.mean(s)), 0),
             "min": round(float(np.min(s)), 0),
             "max": round(float(np.max(s)), 0),
-            "std": round(float(np.std(s)), 0),
         }
 
     data = {
         "dataset_name": "credit score",
         "train_instances": int(len(X_train)),
-        "num_features": int(len(X_train.columns)),
-        "features": X_train.columns.tolist(),
-        "target": "Credit score",
         "target_statistics": {
             "mean": round(float(np.mean(y_train)), 0),
             "min": round(float(np.min(y_train)), 0),
             "max": round(float(np.max(y_train)), 0),
-            "std": round(float(np.std(y_train)), 0),
         },
         "feature_statistics": feature_stats,
     }
@@ -1352,7 +1350,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         "data": data,
         "visualisation": visualisation,
     }
-
 
 def model_meta():
     """
