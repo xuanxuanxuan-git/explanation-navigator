@@ -18,25 +18,25 @@ const DESIGN_B_CONTENT = {
   question: "What do you think this explanation can tell you?", // Select a question you think it can answer.
   options: {
     local: [
-      "How each factor affected my score",
+      "How much each factor affected my current score",
       "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     counterfactual: [
-      "How each factor affected my score",
+      "How much each factor affected my current score",
       "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     global: [
-      "How each factor affected my score",
+      "How much each factor affected my current score",
       "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
     ],
     cp: [
-      "How each factor affected my score",
+      "How much each factor affected my current score",
       "A higher \"on-time payment rate\" can increase my score",
       "Which factor is generally the most important",
       "What actions I can take to improve my score",
@@ -80,8 +80,8 @@ const DESIGN_C_QUESTIONS = {
   },
   cp: {
     tellsYou: [
-      "How would my score change if I increased one factor?",
-      "How sensitive is my score to each factor?"
+      "What happens to my score if I change just one factor?",
+      "How strongly does my score react to a specific factor?"
     ],
     doesntTellYou: [
       "Why did I receive this score?",
@@ -96,15 +96,15 @@ const EXPLANATION_DICT = {
   local: {
     system: "Which factors pushed the applicant's score up or down (local feature importance)",
     ui: "What Affected Your Score",
-    description: "how much each factor increased or decreased your score"
+    description: "how much each factor helped or hurt your score"
   },
   counterfactual: {
-    system: "Smallest set of changes needed for the current applicant to reach target score",
+    system: "Smallest set of changes needed for the applicant to reach target score",
     ui: "How to Improve Your Score",
     description: "the smallest change you could make to reach the target score"
   },
   cp: {
-    system: "How one applicant's predicted credit score changes when changing a single factor",
+    system: "How one applicant's credit score changes when changing a single factor",
     ui: "How Each Factor Affects Your Score",
     description: "how changing one factor at a time would affect your score"
   },
@@ -374,9 +374,9 @@ export default function ChatPage() {
 
     let promptText = ""
     if (category === "tellsYou") {
-      promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Please explain why the currently shown explanation can answer this question, and also tell me the answer.`
+      promptText = `The explanation currently shown: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Explain why the currently shown explanation can answer this question, and also tell me the answer.`
     } else {
-      promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Please explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
+      promptText = `The explanation currently shown: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
     }
 
     handleSend(promptText)
@@ -776,7 +776,7 @@ export default function ChatPage() {
                       // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
 
-                      let promptText = `The explanation currently shown on the dashboard: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What else do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. Also use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                      let promptText = `The explanation currently shown is: ${visibleTexts.system}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
                       handleSend(promptText);
                     }}
                     className="suggestion-btn"

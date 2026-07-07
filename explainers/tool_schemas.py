@@ -31,7 +31,7 @@ class AveragePrediction(BaseModel):
 
 class CpPlot(BaseModel):
     instance_id: int = Field(description="Index of the applicant (0-based).")
-    feature: str = Field(description="Exact factor to vary (e.g. Credit used (%), Months since last late payment, On-time payment rate (%)).")
+    feature: str = Field(description="Exact factor to vary (e.g. Months since last late payment, On-time payment rate (%)). If user didn't specify a feature, use 'Months since last late payment'.")
 
 class Condition(BaseModel):
     op: str = Field(
@@ -103,7 +103,7 @@ explainer_tools = [
     {
         "type": "function",
         "name": "generate_local_shap_bar_plot",
-        "description": "Shows what factors pushed ONE applicant's predicted score up or down. "
+        "description": "Shows what factors pushed ONE applicant's predicted score up or down and how much it pushed from the average score. "
         "Use this when the user asks things like 'why is my score high/low?' or 'what affected my score the most?'. "
         "This explanation applies only to the selected applicant and does NOT represent "
         "factor importance across the dataset.", 

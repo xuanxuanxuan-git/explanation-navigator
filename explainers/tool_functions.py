@@ -348,8 +348,8 @@ def get_instance_features_and_prediction(instance_id: int):
 
     model = _STATE["model"]
     X_test = _STATE["X_test"]
-    X_train = _STATE["X_train"]
     X_scaled = _STATE["X_test_scaled"]
+    feature_ranges = _STATE["feature_ranges"]
 
     x_raw = X_test.iloc[instance_id]
     x_scaled = X_scaled[[instance_id]]
@@ -359,27 +359,15 @@ def get_instance_features_and_prediction(instance_id: int):
     feature_info = {}
 
     for col in X_test.columns:
-        train_col = X_train[col].astype(float)
-
-        q1 = float(train_col.quantile(0.01))
-        q99 = float(train_col.quantile(0.99))
-
         val = float(x_raw[col])
 
-        # clip to range
-        clipped = max(min(val, q99), q1)
-
-        # normalise 0-1
-        if abs(q99 - q1) < 1e-9:
-            norm = 0.5
-        else:
-            norm = (clipped - q1) / (q99 - q1)
+        col_min = int(feature_ranges[col]["min"])
+        col_max = int(feature_ranges[col]["max"])
 
         feature_info[col] = {
             "value": val,
-            "min": round(q1, 4),
-            "max": round(q99, 4),
-            "normalised": round(norm, 4),
+            "min": col_min,
+            "max": col_max,
         }
 
     return {
@@ -390,7 +378,6 @@ def get_instance_features_and_prediction(instance_id: int):
         },
         "visualisation": None,
     }
-
 
 def get_average_prediction(source: str = "all", indices=None):
     """
@@ -791,7 +778,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
         target=50
         default_target = True
 
-    feature_names = X_test.columns.tolist()
+    feature_names = list(feature_ranges_state.keys())
     current_pred = original_pred
 
     # ---------- GREEDY SEARCH ----------
@@ -857,105 +844,103 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     cf_pred = float(model.predict_proba(scaler.transform(x_cf))[0][0])*100
 
     # ---------- VISUALISATION ----------
-    fig = go.Figure()
+    # Create a 3x2 grid for the 6 features
+    fig = make_subplots(
+        rows=3, cols=2, 
+        subplot_titles=feature_names,
+        horizontal_spacing=0.12,
+        vertical_spacing=0.22
+    )
 
-    features = feature_names  # show ALL features
+    for i, f in enumerate(feature_names):
+        row = (i // 2) + 1
+        col = (i % 2) + 1
 
-    def scale(v, f):
-        min_v = float(feature_ranges_state.get(f).get("min"))
-        max_v = float(feature_ranges_state.get(f).get("max"))
-        
-        if max_v - min_v < 1e-9:
-            return 0.5  # constant feature safeguard
-        # clip to avoid going outside range
-        v = max(min(v, max_v), min_v)
-        return (v - min_v) / (max_v - min_v)
-
-    for i, f in enumerate(features):
         v0_raw = float(x0[f].iloc[0])
         v1_raw = float(x_cf[f].iloc[0])
 
-        v0 = scale(v0_raw, f)
-        v1 = scale(v1_raw, f)
+        min_v = float(feature_ranges_state.get(f).get("min"))
+        max_v = float(feature_ranges_state.get(f).get("max"))
 
         changed = abs(v0_raw - v1_raw) > 1e-6
 
-        # --- vertical band (range) ---
+        # --- gray background bar (slider track) ---
         fig.add_trace(go.Scatter(
-            x=[f, f],
-            y=[v0, v1],
-            mode="lines",
-            line=dict(
-                color="rgba(99,102,241,0.4)" if changed else "rgba(180,180,180,0.3)",
-                width=10 if changed else 6,
-            ),
+            x=[min_v, max_v],
+            y=[0, 0],
+            mode="lines+markers+text",  # Added '+markers' here
+            line=dict(color="#e5e7eb", width=8),
+            marker=dict(color="#e5e7eb", size=8),  # Add this to create rounded ends
+            text=[f"{min_v:g} ", f" {max_v:g}"],
+            textposition=["middle left", "middle right"],
+            textfont=dict(size=11, color="#9ca3af"),
+            cliponaxis=False,
             hoverinfo="skip",
             showlegend=False
-        ))
+        ), row=row, col=col)
 
-        # --- arrow showing direction ---
+        # --- highlight line from v0 to v1 ---
         if changed:
+            fig.add_trace(go.Scatter(
+                x=[v0_raw, v1_raw],
+                y=[0, 0],
+                mode="lines",
+                line=dict(color="rgba(37, 99, 235, 0.4)", width=6),
+                hoverinfo="skip",
+                showlegend=False
+            ), row=row, col=col)
+
+            # arrow showing the change
             fig.add_annotation(
-                x=f,
-                y=v1,
-                ax=f,
-                ay=v0,
-                xref="x",
-                yref="y",
-                axref="x",
-                ayref="y",
+                x=v1_raw, y=0,
+                ax=v0_raw, ay=0,
+                xref=f"x{i+1}", yref=f"y{i+1}",
+                axref=f"x{i+1}", ayref=f"y{i+1}",
                 showarrow=True,
-                arrowhead=1,
-                arrowsize=1.5,
-                arrowwidth=1.5,
-                arrowcolor="rgba(99,102,241,0.9)",
-                opacity=0.9
+                arrowhead=2,
+                arrowsize=1.2,
+                arrowwidth=2,
+                arrowcolor="#2563eb",
+                opacity=0.8
             )
 
-            # --- counterfactual point ---
+            # CF point (The new target value)
             fig.add_trace(go.Scatter(
-                x=[f],
-                y=[v1],
-                mode="text",
+                x=[v1_raw],
+                y=[0],
+                mode="markers+text",
+                marker=dict(symbol="circle", color="#2563eb", size=11),
                 text=[f"{v1_raw:.0f}"],
-                textposition="top center" if v1>=v0 else "bottom center",
-                textfont=dict(
-                    size=10,
-                    color="black"
-                ),
-                hovertemplate=(
-                    f"<b>{f}</b><br>"
-                    f"Counterfactual: {v1_raw:.0f}<br>"
-                    "<extra></extra>"
-                ),
+                textposition="bottom center",
+                textfont=dict(size=11, color="#2563eb"),
+                hovertemplate=(f"<b>{f}</b><br>New: {v1_raw:.0f}<br><extra></extra>"),
                 showlegend=False
-            ))
+            ), row=row, col=col)
 
-        # --- original point (the black horizontal line) ---
+        # Original point (The baseline value)
         fig.add_trace(go.Scatter(
-            x=[f],
-            y=[v0],
+            x=[v0_raw],
+            y=[0],
             mode="markers+text",
             marker=dict(
-                symbol="line-ew", 
-                color="black",
-                size=10,            # increase size so the line is visible
-                opacity=1 if changed else 0.6,
-                line=dict(width=1, color="black")  
+                symbol="circle",
+                color="gray" if changed else "#2563eb",
+                size=10 if changed else 11
             ),
             text=[f"{v0_raw:.0f}"],
-            textposition="bottom center" if v1>=v0 else "top center",
-            textfont=dict(
-                size=10,
-                color="black"
-            ),
-            hovertemplate=(
-                f"<b>{f}</b><br>"
-                f"Original: {v0_raw:.0f}<br>"
-                "<extra></extra>"
-            ),
+            textposition="bottom center",
+            textfont=dict(size=11, color="gray" if changed else "#374151"),
+            hovertemplate=(f"<b>{f}</b><br>Current: {v0_raw:.0f}<br><extra></extra>"),
             showlegend=False
-        ))
+        ), row=row, col=col)
+
+        # Hide axis lines, grid, and ticks for a clean "slider" look
+        padding = (max_v - min_v) * 0.1
+        fig.update_xaxes(showgrid=False, zeroline=False, showticklabels=False, range=[min_v - padding, max_v + padding], row=row, col=col)
+        fig.update_yaxes(showgrid=False, zeroline=False, showticklabels=False, range=[-1, 1], row=row, col=col)
+
+    # Style subplot titles
+    fig.update_annotations(font_size=11)
 
     # Dynamic main title reflecting the target score
     target_display = int(round(target))
@@ -963,18 +948,13 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     fig.update_layout(
         title={
             "text": f"How to improve your score to {target_display}<br><span style='font-size: 13px; color: gray; font-weight: normal;'>The smallest changes needed to reach the target score</span>",
-            "y": 0.93,      
+            "y": 0.9,      
             "x": 0.05, 
         },
-        # Increased 't' (top margin) to accommodate subtitle
-        margin={"l": 40, "r": 20, "t": 65, "b": 120},
+        margin={"l": 30, "r": 30, "t": 90, "b": 10}, # Tighter left and right margins
         template="plotly_white",
         showlegend=False,
-    )
-
-    fig.update_yaxes(
-        visible=False,
-        range=[-0.2, 1.15]  # allow space for text below
+        height=290, 
     )
 
     return {
