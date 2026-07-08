@@ -1231,11 +1231,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     data = {
         "dataset_name": "credit score",
         "train_instances": int(len(X_train)),
-        "target_statistics": {
-            "mean": round(float(np.mean(y_train)), 0),
-            "min": round(float(np.min(y_train)), 0),
-            "max": round(float(np.max(y_train)), 0),
-        },
         "feature_statistics": feature_stats,
     }
 

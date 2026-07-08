@@ -103,7 +103,7 @@ explainer_tools = [
     {
         "type": "function",
         "name": "generate_local_shap_bar_plot",
-        "description": "Shows what factors pushed ONE applicant's predicted score up or down and how much it pushed from the average score. "
+        "description": "Shows what factors pushed ONE applicant's predicted score up or down and how much it pushed from the average score. But it does not explain why a factor's contribution is positive or negative. "
         "Use this when the user asks things like 'why is my score high/low?' or 'what affected my score the most?'. "
         "This explanation applies only to the selected applicant and does NOT represent "
         "factor importance across the dataset.", 
@@ -235,8 +235,7 @@ explainer_tools = [
         "name": "dataset_meta",
         "description": (
             "Provide information about the credit scoring dataset used by the model. "
-            "Use this when the user asks about the dataset overview (size, features, target), "
-            "summary statistics, or the distribution of a specific feature. "
+            "Use this when the user asks about dataset size, and distribution of features. "
             "If users want to see the general spread of a factor, pass in 'feature' name. "
             "If users ask 'where do I stand compared to everyone else?' pass both 'feature' and 'instance_id' in."
         ),
