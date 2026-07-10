@@ -345,7 +345,7 @@ export default function Dashboard({
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {shapLoading && !shapViz && (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Loading Local SHAP explanation
+              Loading 
             </div>
           )}
 
@@ -419,7 +419,7 @@ export default function Dashboard({
             <div style={{ padding: "12px 0px" }}>
               {cfLoading && !cfViz && (
                 <div style={{ fontSize: 12, color: "#6b7280" }}>
-                  Loading counterfactual
+                  Loading
                 </div>
               )}
 
@@ -458,7 +458,7 @@ export default function Dashboard({
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {globalLoading && !globalViz && (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Loading Global explanation
+              Loading
             </div>
           )}
 
@@ -496,7 +496,7 @@ export default function Dashboard({
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {cpLoading && !cpViz && (
             <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Loading CP Plots
+              Loading
             </div>
           )}
 

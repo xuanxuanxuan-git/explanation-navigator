@@ -37,10 +37,17 @@ export default function InstanceEditor({ instanceId }) {
     try {
       const res = await fetchInstance(id)
       const data = res?.data || {}
-
-      const f = data.features || {}
+  
+      const rawFeatures = data.features || {}
+      const f = Object.fromEntries(
+        Object.entries(rawFeatures).map(([name, value]) => [
+          name,
+          { value: Number(value) },
+        ])
+      )
+  
       const p = data.prediction
-
+  
       setFeatures(f)
       setOriginalFeatures(JSON.parse(JSON.stringify(f)))
       setPrediction(p)

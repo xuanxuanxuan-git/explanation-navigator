@@ -346,34 +346,13 @@ def get_instance_features_and_prediction(instance_id: int):
     instance_id = int(instance_id)
     _check_instance_id(instance_id)
 
-    model = _STATE["model"]
-    X_test = _STATE["X_test"]
-    X_scaled = _STATE["X_test_scaled"]
-    feature_ranges = _STATE["feature_ranges"]
-
-    x_raw = X_test.iloc[instance_id]
-    x_scaled = X_scaled[[instance_id]]
-
-    pred = float(model.predict_proba(x_scaled)[0][0]) * 100
-
-    feature_info = {}
-
-    for col in X_test.columns:
-        val = float(x_raw[col])
-
-        col_min = int(feature_ranges[col]["min"])
-        col_max = int(feature_ranges[col]["max"])
-
-        feature_info[col] = {
-            "value": val,
-            "min": col_min,
-            "max": col_max,
-        }
+    x_raw = _STATE["X_test"].iloc[instance_id]
+    pred = float(_STATE["model"].predict_proba(_STATE["X_test_scaled"][[instance_id]])[0][0]) * 100
 
     return {
         "data": {
             "instance_id": instance_id,
-            "features": feature_info,
+            "features": {col: int(val) for col, val in x_raw.items()},
             "prediction": int(round(pred)),
         },
         "visualisation": None,
@@ -496,9 +475,9 @@ def get_cp_plot(instance_id: int, feature: str, grid_points: int = 101):
         gridcolor="white", # Contrasts with blue background
     )
     
-    # Format data for LLM: Slice the pre-calculated arrays to get every 5th points
-    llm_grid = grid.tolist()[::5]
-    llm_preds = preds[::5]
+    # Format data for LLM: Slice the pre-calculated arrays to get every 2nd points
+    llm_grid = grid.tolist()[::2]
+    llm_preds = preds[::2]
     
     llm_data_points = [
         {"value": round(v, 1), "score": round(p, 1)}
@@ -733,12 +712,18 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
         tickvals=[0, 25, 50, 75, 100], 
         gridcolor="white", # Contrasts with blue background
     )
+    llm_grid = grid.tolist()[::2]
+    llm_preds = pdp_values.tolist()[::2]
+
+    llm_data_points = [
+        {"value": round(v), "score": round(p)}
+        for v, p in zip(llm_grid, llm_preds)
+    ]
     
     return {
         "data": {
             "feature": feature,
-            "sampled_values": [round(v, 1) for v in grid.tolist()],
-            "prediction": [int(round(p)) for p in pdp_values.tolist()],
+            "trend_data": llm_data_points,
         },
         "visualisation": _plotly_payload(
             fig,
@@ -1200,37 +1185,54 @@ def predict_with_feature_changes(instance_id: int, changes: dict):
         "visualisation": None,
     }
 
-
 # TODO: show the risk prediction distribution
 # TODO: show the feature distribution of a specific user group
-def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
+def system_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     """
-    Return high-level dataset info.
+    Return high-level information about the credit scoring system.
+
+    Includes:
+    - dataset size
+    - feature summary statistics
+    - model type
+    - prediction task
+    - model accuracy
+
     If feature is provided, also return that feature's distribution.
-    If instance_id is provided, highlight its position.
+    If instance_id is provided, highlight that applicant's position in the distribution.
     """
     _init_if_needed()
 
+    model = _STATE["model"]
+    scaler = _STATE["scaler"]
     X_train = _STATE["X_train"]
     X_test = _STATE["X_test"]
-    y_train = _STATE["y_train"]
+    y_test = _STATE["y_test"]
+    feature_ranges = _STATE["feature_ranges"]
 
-    # Determine which columns to calculate stats for
-    # If a specific feature is requested, only calculate for that one.
     cols_to_process = [feature] if feature and feature in X_train.columns else X_train.columns
 
     feature_stats = {}
     for col in cols_to_process:
-        s = X_train[col].values  
+        s = X_train[col].values
         feature_stats[col] = {
             "mean": round(float(np.mean(s)), 0),
-            "min": round(float(np.min(s)), 0),
-            "max": round(float(np.max(s)), 0),
+            "min": feature_ranges[col]["min"],
+            "max": feature_ranges[col]["max"],
         }
+
+    X_scaled = scaler.transform(X_test)
+    probs = model.predict_proba(X_scaled)[:, 0]
+    accuracy = accuracy_score(y_test, probs < 0.5)
 
     data = {
         "dataset_name": "credit score",
+        "prediction_task": "Predicting credit score of applicants",
+        "model_type": "Neural Network Classifier",
         "train_instances": int(len(X_train)),
+        "evaluation_metrics": {
+            "accuracy": round(float(accuracy), 2)
+        },
         "feature_statistics": feature_stats,
     }
 
@@ -1305,9 +1307,8 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
                 "x": 0.05,
             },
             xaxis={"title": feature, "gridcolor": "white"},
-            yaxis={"title": "No of applicants", "gridcolor": "white"},
+            yaxis={"title": "No. of applicants", "gridcolor": "white"},
             bargap=0.05,
-            # Increased top margin to fit the subtitle
             margin={"l": 60, "r": 20, "t": 70, "b": 20},
             showlegend=False,
         )
@@ -1315,7 +1316,7 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
         visualisation = _plotly_payload(
             fig,
             meta={
-                "tool": "dataset_meta",
+                "tool": "system_meta",
                 "feature": feature,
                 "instance_id": instance_id,
             },
@@ -1324,35 +1325,6 @@ def dataset_meta(feature: str = None, instance_id: int = None, bins: int = 30):
     return {
         "data": data,
         "visualisation": visualisation,
-    }
-
-def model_meta():
-    """
-    Return high-level information about the trained model.
-    """
-    _init_if_needed()
-
-    model = _STATE["model"]
-    scaler = _STATE["scaler"]
-
-    X_test = _STATE["X_test"]
-    y_test = _STATE["y_test"]
-
-    X_scaled = scaler.transform(X_test)
-
-    preds = model.predict_proba(X_scaled)[:, 0] * 100
-
-    accuracy = accuracy_score(y_test, preds > 0.5)
-
-    return {
-        # "data": {
-            "model_type": "Neural Network Classifier",
-            "prediction_task": "Predicting credit score of applicants",
-            "evaluation_metrics": {
-                "accuracy": round(accuracy, 4)
-            # },
-        },
-        "visualisation": None,
     }
 
 
@@ -1366,9 +1338,8 @@ available_tools_mapping = {
     "get_counterfactual_explanation": get_counterfactual_explanation,
     "get_subgroup": get_subgroup,
     "predict_with_feature_changes": predict_with_feature_changes,
-    "get_similar_instances": get_similar_instances,
-    "get_representative_instances": get_representative_instances,
-    "dataset_meta": dataset_meta,
-    "model_meta": model_meta,
+    # "get_similar_instances": get_similar_instances,
+    # "get_representative_instances": get_representative_instances,
+    "system_meta": system_meta,
     "get_partial_dependence_plot": get_partial_dependence_plot,
 }

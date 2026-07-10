@@ -19,7 +19,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from explainers.tool_schemas import explainer_tools
-from explainers.tool_functions import available_tools_mapping
+from explainers.tool_functions import available_tools_mapping, _STATE
 
 load_dotenv()
 
@@ -148,6 +148,7 @@ def _shorten_messages(messages, num_tools):
         if isinstance(payload, dict):
             payload.pop("sampled_values", None)
             payload.pop("prediction", None)
+            payload.pop("trend_data", None)
 
             msg["content"] = json.dumps(payload)
 
@@ -668,7 +669,7 @@ def chat_with_tools_stream():
             for chunk, done in llm_client.stream(
                 messages=messages_with_tools,
                 model=payload_model,
-                options=data.get("options") or {"temperature": 0.1},
+                options={"temperature": 0.2},
             ):
                 assistant_text += chunk
                 yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
@@ -749,8 +750,8 @@ def list_tools():
 @app.get("/api/instance/<int:instance_id>")
 def get_instance(instance_id):
     try:
-        result = available_tools_mapping["get_instance_features_and_prediction"](instance_id=instance_id)
-        return jsonify(result)
+        profile = available_tools_mapping["get_instance_features_and_prediction"](instance_id=instance_id)
+        return jsonify(profile)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 

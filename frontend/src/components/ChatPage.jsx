@@ -234,9 +234,8 @@ export default function ChatPage() {
       IMPORTANT: Even though this explanation is displayed to the user, you do NOT automatically know what the actual data or results are. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Guidelines:
-      - Keep answers concise, factual, and consistent with reply from tool calls.
-      - Do NOT infer missing values.
-      - Do not guess or hallucinate the explanation results. Do not add your own interpretation!
+      - DO NOT OVER-SUMMARIZE: Act as a direct translator. Present the tool's findings in clear, layperson-friendly language, but preserve all the specific details and nuance provided by the tool.
+      - AVOID ADDED ADVICE: Do not invent your own financial advice, guess missing values, or hallucinate results. Do not infer the relationship between factor value and credit score.
       - If required inputs (e.g., instance_id, factor name, target) are missing, ask the user to provide them.
       - Clearly distinguish between advice for a single applicant versus trends across applicants.
       - PROACTIVE TOOL CALLING: If the user asks for information that cannot be answered using the currently displayed explanation and requires a different type of explanation (e.g., asking how to improve their score while viewing a current score breakdown), explicitly explain why the current explanation is insufficient, then immediately call the appropriate tool to provide the relevant explanation. Do not only tell the user that another explanation is needed.`

@@ -80,7 +80,7 @@ class RepresentativeInstances(BaseModel):
     )
     k: Optional[int] = Field(default=3, description="Number of representative instances to return from the subgroup.")
 
-class DatasetMeta(BaseModel):
+class SystemMeta(BaseModel):
     feature: Optional[str] = Field(
         default=None,
         description=(
@@ -89,7 +89,6 @@ class DatasetMeta(BaseModel):
     )
     instance_id: Optional[int] = Field(
         default=None,
-        ge=0,
         description=(
             "Index of the applicant (0-based)."
         )
@@ -209,49 +208,63 @@ explainer_tools = [
         """,
         "parameters": PredictWithFeatureChanges.model_json_schema(), 
     },
+    # {
+    #     "type": "function",
+    #     "name": "get_similar_instances",
+    #     "description": (
+    #         "Find applicants in the dataset that are most similar to a given applicant based on their feature values. "
+    #         "Use this when the user wants comparable applicants or similar credit profiles. "
+    #         "The tool returns the indices and profiles (feature values) of the most similar applicants."
+    #     ),
+    #     "parameters": SimilarInstances.model_json_schema(),
+    # },
+    # {
+    #     "type": "function",
+    #     "name": "get_representative_instances",
+    #     "description": (
+    #         "Return representative applicants of a subgroup. "
+    #         "The subgroup must first be identified using the get_subgroup tool, "
+    #         "which returns a list of indices. These indices should then be passed "
+    #         "to this function. The function returns typical examples of that group."
+    #     ),
+    #     "parameters": RepresentativeInstances.model_json_schema(),
+    # },
+    # {
+    #     "type": "function",
+    #     "name": "dataset_meta",
+    #     "description": (
+    #         "Provide information about the credit scoring dataset used by the model. "
+    #         "Use this when the user asks about dataset size, and distribution of features. "
+    #         "If users want to see the general spread of a factor, pass in 'feature' name. "
+    #         "If users ask 'where do I stand compared to everyone else?' pass both 'feature' and 'instance_id' in."
+    #     ),
+    #     "parameters": DatasetMeta.model_json_schema(),
+    # },
+    # {
+    #     "type": "function",
+    #     "name": "model_meta",
+    #     "description": (
+    #         "Provides general information about how the AI system works, its accuracy, and what it tries to predict."
+    #     ),
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {},
+    #         "required": []
+    #     },
+    # },
     {
         "type": "function",
-        "name": "get_similar_instances",
+        "name": "system_meta",
         "description": (
-            "Find applicants in the dataset that are most similar to a given applicant based on their feature values. "
-            "Use this when the user wants comparable applicants or similar credit profiles. "
-            "The tool returns the indices and profiles (feature values) of the most similar applicants."
+            "Provides general information about the credit scoring system, including "
+            "what the model predicts, how accurate it is, how many training examples it uses, "
+            "and summary statistics for the dataset features. "
+            "Use this when the user asks about the model, the dataset, or how a feature is distributed. "
+            "If the user wants to see the overall spread of one factor, pass 'feature'. "
+            "If the user asks where a specific applicant stands compared with other applicants on that factor, "
+            "pass both 'feature' and 'instance_id'."
         ),
-        "parameters": SimilarInstances.model_json_schema(),
-    },
-    {
-        "type": "function",
-        "name": "get_representative_instances",
-        "description": (
-            "Return representative applicants of a subgroup. "
-            "The subgroup must first be identified using the get_subgroup tool, "
-            "which returns a list of indices. These indices should then be passed "
-            "to this function. The function returns typical examples of that group."
-        ),
-        "parameters": RepresentativeInstances.model_json_schema(),
-    },
-    {
-        "type": "function",
-        "name": "dataset_meta",
-        "description": (
-            "Provide information about the credit scoring dataset used by the model. "
-            "Use this when the user asks about dataset size, and distribution of features. "
-            "If users want to see the general spread of a factor, pass in 'feature' name. "
-            "If users ask 'where do I stand compared to everyone else?' pass both 'feature' and 'instance_id' in."
-        ),
-        "parameters": DatasetMeta.model_json_schema(),
-    },
-    {
-        "type": "function",
-        "name": "model_meta",
-        "description": (
-            "Provides general information about how the AI system works, its accuracy, and what it tries to predict."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        },
+        "parameters": SystemMeta.model_json_schema(),
     },
     {
         "type": "function",
@@ -275,7 +288,8 @@ explainer_tools = [
             "Use this when the user asks about the average effect of a feature, e.g.: "
             "- 'How does a clean repayment history (On-time payment rate (%)) affect the score overall?' "
             "- 'What is the effect of recent applications (Months since last credit application) on average?' "
-            "- 'Do more loans generally lower the score?'"
+            "- 'Do more loans generally lower the score?'."
+            "Call this tool before explaining the general trend of a factor."
         ),
         "parameters": PartialDependencePlot.model_json_schema(),
     }
