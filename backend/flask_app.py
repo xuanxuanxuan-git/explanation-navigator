@@ -161,14 +161,15 @@ def get_tool_schemas(provider: Optional[str] = None):
     Native schemas are OpenAI/Gemini-style:
       { "type": "function", "name": ..., "description": ..., "parameters": ... }
 
-    Ollama expects:
+    Ollama and current OpenAI/Azure APIs expect:
       { "type": "function", "function": { "name": ..., "description": ..., "parameters": ... } }
     """
     provider = (provider or LLM_PROVIDER).lower()
-    needs_wrapped = provider == "ollama" or AZURE_OPENAI_CHAT_DEPLOYMENT == "gpt-4.1"  # needs to wrap for gpt-4.1 too
     
-    # If the provider is Ollama/o3 but the schema is flat schema,
-    # reformat the schema to into Ollama version.
+    # Both Ollama and Azure OpenAI (especially newer models like gpt-5.1) 
+    # require the nested "function" structure.
+    needs_wrapped = provider in ["ollama", "azure_openai", "openai", "azure"]
+    
     if needs_wrapped:
         normalised = []
         for t in explainer_tools:
@@ -186,9 +187,8 @@ def get_tool_schemas(provider: Optional[str] = None):
                 })
         return normalised
 
-    # OpenAI / Azure / Gemini accept the flat schema
+    # Fallback for Gemini which accepts the flat schema
     return explainer_tools
-
 
 def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
     """
