@@ -12,14 +12,8 @@ import requests
 from typing import Dict, List, Tuple, Optional
 from openai import OpenAI, AzureOpenAI
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
-
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from explainers.tool_schemas import explainer_tools
-from explainers.tool_functions import available_tools_mapping, _STATE
+from .explainers.tool_schemas import explainer_tools
+from .explainers.tool_functions import available_tools_mapping, _STATE
 
 load_dotenv()
 
