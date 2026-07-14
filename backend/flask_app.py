@@ -12,8 +12,8 @@ import requests
 from typing import Dict, List, Tuple, Optional
 from openai import OpenAI, AzureOpenAI
 
-from .explainers.tool_schemas import explainer_tools
-from .explainers.tool_functions import available_tools_mapping, _STATE
+from explainers.tool_schemas import explainer_tools
+from explainers.tool_functions import available_tools_mapping, _STATE
 
 load_dotenv()
 
