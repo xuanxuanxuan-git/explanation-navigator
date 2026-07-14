@@ -1,6 +1,6 @@
 // Central place to talk to your Flask backend
 
-const BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'
+const BASE_URL = import.meta.env.VITE_BACKEND_URL
 
 // Generate a unique ID with the exact format: log_YYYYMMDD_HHMMSS_user_random
 const SESSION_ID = (() => {
