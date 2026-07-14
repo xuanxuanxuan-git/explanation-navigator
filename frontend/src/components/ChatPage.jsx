@@ -234,7 +234,7 @@ export default function ChatPage() {
       IMPORTANT: You do NOT automatically know the data behind it. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Guidelines:
-      - Be concise. Answer in less than 200 words. Use layperson-friendly language.
+      - Be concise. Use layperson-friendly language.
       - AVOID ADDED ADVICE: Do not invent your own financial advice, guess missing values, or hallucinate results. Do not infer the relationship between factor value and credit score.
       - If required inputs (e.g., factor name, target) are missing, ask the user to provide them.
       - Clearly distinguish between advice for a single applicant versus trends across applicants.
