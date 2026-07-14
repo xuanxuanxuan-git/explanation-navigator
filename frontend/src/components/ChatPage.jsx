@@ -218,7 +218,7 @@ export default function ChatPage() {
 
   // The system prompt dynamically reads the current dashboard state.
   const system = useMemo(() => {
-    return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} in the dataset who applies to increase their credit limit and has no knowledge of AI. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit limit increase.
+    return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} (Alex) in the dataset who applies to increase their credit limit and has no knowledge of AI. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit limit increase.
 
       Available factors/features include 6 variables:
       - Credit used (%) -- Percentage of available credit already used        
