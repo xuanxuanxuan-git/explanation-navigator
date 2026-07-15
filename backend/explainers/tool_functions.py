@@ -207,7 +207,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
         )],
         layout=go.Layout(
             title={
-                "text": "What affected your score<br><span style='font-size: 13px; color: gray; font-weight: normal;'>How each factor contributes to your score</span>",
+                "text": "What affected your score<br><span style='font-size: 13px; color: gray; font-weight: normal;'>How much each factor contributes to your score</span>",
                 "y": 0.88,      
                 "x": 0.05,      
             },
@@ -230,18 +230,18 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
             ],
             annotations=[
                 dict(
-                    x=0, y=1.15, 
+                    x=0, y=1.12, 
                     xref="x", yref="paper",
-                    text="<span style='font-size: 14px;'>←</span> Decrease by",
+                    text="Decrease score",
                     showarrow=False,
                     xanchor="right",
                     xshift=-5,
                     font=dict(size=10, color="gray")
                 ),
                 dict(
-                    x=0, y=1.15, 
+                    x=0, y=1.12, 
                     xref="x", yref="paper",
-                    text="Increase by <span style='font-size: 14px;'>→</span>",
+                    text="Increase score",
                     showarrow=False,
                     xanchor="left",
                     xshift=5,
