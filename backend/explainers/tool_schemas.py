@@ -102,10 +102,11 @@ explainer_tools = [
     {
         "type": "function",
         "name": "generate_local_shap_bar_plot",
-        "description": "Shows what factors pushed ONE applicant's predicted score up or down and how much it pushed from the average score. But it does not explain why a factor's contribution is positive or negative. "
-        "Use this when the user asks things like 'why is my score high/low?' or 'what factor does the model consider the most when deciding my score'. "
-        "This explanation applies only to the selected applicant and does NOT represent "
-        "factor importance across the dataset.", 
+        "description": "Shows what factors pushed ONE specific applicant's predicted score up or down and by how much. "
+            "Use this when the user asks things like 'why is my score high/low?' or 'what factor was the most important for my application?'. "
+            "CRITICAL: If the user asks 'Why is factor X the most important?' or 'What is the most important factor?' while discussing their own profile or score, "
+            "they are asking about LOCAL importance. Use this tool. "
+            "This explanation applies only to the selected applicant and does NOT represent factor importance across applicants.", 
         "parameters": ShapBarPlot.model_json_schema(),
     },
     {
@@ -113,7 +114,7 @@ explainer_tools = [
         "name": "generate_global_subgroup_shap_plot",
         "description": """
             Shows which factors matter the most on average, or across a specific group of people. 
-            Use this when the user asks questions such as:
+            Use this ONLY when the user explicitly asks about general system rules or average applicants, such as:
             - "Which factors are most important in the model?"
             - "What factors matter most on average?"
             - "For applicants with more than 12 months since last late payment, which factors influence their predicted credit score the most?"
