@@ -232,7 +232,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
                 dict(
                     x=0, y=1.12, 
                     xref="x", yref="paper",
-                    text="Decrease score",
+                    text="Decrease score by",
                     showarrow=False,
                     xanchor="right",
                     xshift=-5,
@@ -241,7 +241,7 @@ def generate_shap_bar_plot(instance_id: int, max_display: int = 10):
                 dict(
                     x=0, y=1.12, 
                     xref="x", yref="paper",
-                    text="Increase score",
+                    text="Increase score by",
                     showarrow=False,
                     xanchor="left",
                     xshift=5,
@@ -808,7 +808,7 @@ def get_counterfactual_explanation(instance_id: int, target: float = None, max_s
     # Months since last late payment 45; number of loans 30/22
     # Months since last late payment 55; months since last credit application 20
 
-    if target == 50:
+    else:
         x_cf["Months since last late payment"] = 55
         # x_cf["Number of loans"] = 30
         x_cf["Months since last credit application"] = 20

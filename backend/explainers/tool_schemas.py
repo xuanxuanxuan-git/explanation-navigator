@@ -103,7 +103,7 @@ explainer_tools = [
         "type": "function",
         "name": "generate_local_shap_bar_plot",
         "description": "Shows what factors pushed ONE applicant's predicted score up or down and how much it pushed from the average score. But it does not explain why a factor's contribution is positive or negative. "
-        "Use this when the user asks things like 'why is my score high/low?' or 'what affected my score the most?'. "
+        "Use this when the user asks things like 'why is my score high/low?' or 'what factor does the model consider the most when deciding my score'. "
         "This explanation applies only to the selected applicant and does NOT represent "
         "factor importance across the dataset.", 
         "parameters": ShapBarPlot.model_json_schema(),
@@ -115,9 +115,9 @@ explainer_tools = [
             Shows which factors matter the most on average, or across a specific group of people. 
             Use this when the user asks questions such as:
             - "Which factors are most important in the model?"
-            - "What factors matter most overall?"
+            - "What factors matter most on average?"
             - "For applicants with more than 12 months since last late payment, which factors influence their predicted credit score the most?"
-            Do NOT used this tool for questions about a specific person.", 
+            Emphasise that this is broader pattern across applicants. Do NOT used this tool for questions about a specific person.", 
         """,
         "parameters": ShapSummaryPlot.model_json_schema(),
     },
@@ -270,7 +270,7 @@ explainer_tools = [
         "type": "function",
         "name": "get_counterfactual_explanation",
         "description": (
-            "Calculates the smallest combination of changes a user can make to improve their credit score to a target value. "
+            "Calculates the smallest changes a user can make to improve their credit score to a target value. "
             "Emphasise that this represents the MINIMUM required changes, but these specific changes must be implemented simultaneously to reach the target score. Individual changes should NOT be interpreted in isolation. "
             "Only include `target` if the user explicitly specifies a desired score."
             "Use this tool when the user asks: "
