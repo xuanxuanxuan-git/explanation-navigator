@@ -218,9 +218,9 @@ export default function ChatPage() {
 
   // The system prompt dynamically reads the current dashboard state.
   const system = useMemo(() => {
-    return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} (Alex) in the dataset who applies to increase their credit limit and has no knowledge of AI. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100, where higher values indicate stronger chance for a credit limit increase.
+    return `You are a helpful assistant explaining a machine learning model used as an automated tool to approve or reject credit limit increase applications. The user represents applicant ID ${userInstanceId} (Alex) in the dataset who applies to increase their credit limit and has no knowledge of AI. When answering questions, assume the user is asking about their own credit profile unless stated otherwise. The model produces a credit score from 0 to 100. A score of 50 or higher means the application is approved.
 
-      Available factors/features include 6 variables:
+      The model considers these six factors/features:
       - Credit used (%) -- Percentage of available credit already used        
       - Months since last late payment -- How long since they last missed a payment
       - On-time payment rate (%) -- How often they've paid on time
@@ -228,16 +228,15 @@ export default function ChatPage() {
       - Loans not paid off (%) -- How many borrowing accounts still have debt on them
       - Months since last credit application -- How long since they last applied for credit
       
-      Currently, the user has the following explanation visible on their dashboard:
-      [ ${visibleTexts.system} ]
-      If the user refers to "this explanation", "the chart" or "the figure", they are referring to this visible panel. Contextualise your answers based on what they can see. 
+      Currently, the user only has the following explanation visible on their dashboard: ${visibleTexts.ui} (${visibleTexts.system}). 
+      If the user refers to “this explanation,” “the chart,” or “the figure,” they mean this specific visible panel. Tailor your response to what is shown here, and do not imply that any other tools are visible on the dashboard. 
       IMPORTANT: You do NOT automatically know the data behind it. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Guidelines:
-      - Be concise. Use layperson-friendly language.
+      - Be concise. Use layperson-friendly language. Answer in less than 200 words.
       - AVOID ADDED ADVICE: Do not invent your own financial advice, guess missing values, or hallucinate results. Do not infer the relationship between factor value and credit score.
       - If required inputs (e.g., factor name, target) are missing, ask the user to provide them.
-      - Clearly distinguish between advice for a single applicant versus trends across applicants.
+      - Clearly distinguish between advice for a single applicant versus a broader pattern across applicants.
       - PROACTIVE TOOL CALLING: If the user asks for information that cannot be answered using the currently displayed explanation and requires a different type of explanation (e.g., asking how to improve their score while viewing a current score breakdown), explicitly explain why the current explanation is insufficient, then immediately call the appropriate tool to provide the relevant explanation. Do not only tell the user that another explanation is needed.`
   }, [userInstanceId, visibleTexts.system])
 
@@ -296,33 +295,41 @@ export default function ChatPage() {
       onVisualisations: vizs => {
         if (!vizs?.length) return
 
-        const getVizType = (toolName) => {
-          if (toolName === "get_counterfactual_explanation") return "counterfactual"
-          if (toolName === "generate_shap_bar_plot" || toolName === "generate_local_shap_bar_plot") return "local"
-          if (toolName === "generate_shap_summary_plot") return "global"
-          if (toolName === "get_cp_plot" || toolName === "generate_all_cp_plots") return "cp"
-          return "extra" // Unrecognised or extra charts
-        }
-
         const counterfactuals = []
-        const cpVizs = []
+        const cpDashboardVizs = []
         const inlineVizes = []
 
         vizs.forEach(v => {
           const tool = v?.meta?.tool || v?.visualisation?.meta?.tool
-          const vizType = getVizType(tool)
+          
+          let vizType = "extra"
+          if (tool === "get_counterfactual_explanation") vizType = "counterfactual"
+          if (tool === "generate_shap_bar_plot" || tool === "generate_local_shap_bar_plot") vizType = "local"
+          if (tool === "generate_shap_summary_plot") vizType = "global"
+          
+          // Separate single CP plots from the "All CP plots" view
+          if (tool === "generate_all_cp_plots") vizType = "cp_dashboard"
+          if (tool === "get_cp_plot") vizType = "single_cp_plot"
 
           // Extract specific types to pass down to Dashboard
           if (vizType === "counterfactual") {
             counterfactuals.push(v)
           }
-          else if (vizType === "cp") {
-            cpVizs.push(v)
+          else if (vizType === "cp_dashboard") {
+            cpDashboardVizs.push(v)
           }
 
-          // If the explanation is NOT currently selected in the dashboard checklist, 
-          // or it's an "extra" figure, display it inline in the chat message
-          if (selectedExpRef.current !== vizType || vizType === "extra") {
+          // Determine what goes into the chat timeline (inline)
+          // - If it's a "single_cp_plot", it ALWAYS goes in the chat.
+          // - If it's a dashboard plot (local, global, cf, cp_dashboard) but NOT currently selected, it goes in the chat.
+          if (
+            vizType === "extra" || 
+            vizType === "single_cp_plot" || 
+            (vizType === "cp_dashboard" && selectedExpRef.current !== "cp") ||
+            (vizType === "local" && selectedExpRef.current !== "local") ||
+            (vizType === "global" && selectedExpRef.current !== "global") ||
+            (vizType === "counterfactual" && selectedExpRef.current !== "counterfactual")
+          ) {
             inlineVizes.push(v)
           }
         })
@@ -331,8 +338,8 @@ export default function ChatPage() {
           setCounterfactualViz(JSON.parse(JSON.stringify(counterfactuals[0])))
         }
 
-        if (cpVizs.length > 0) {
-          setCpVisualisations(cpVizs)
+        if (cpDashboardVizs.length > 0) {
+          setCpVisualisations(cpDashboardVizs)
         }
 
         if (inlineVizes.length > 0) {
