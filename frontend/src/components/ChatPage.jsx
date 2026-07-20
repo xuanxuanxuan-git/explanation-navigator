@@ -125,7 +125,7 @@ const generateWelcomeMessage = (explanationKey) => {
 };
 
 export default function ChatPage() {
-  const [userInstanceId] = useState(57)
+  const [userInstanceId] = useState(58)
 
   // Start with no explanation selected so the user is forced to pick one.
   const [selectedExplanation, setSelectedExplanation] = useState("")
@@ -413,6 +413,7 @@ export default function ChatPage() {
           display: "flex",
           flexDirection: "column",
           gap: 8,
+          minWidth: 400,
         }}
       >
         {/* Instance Editor */}

@@ -183,7 +183,7 @@ export default function InstanceEditor({ instanceId }) {
           flexDirection: "column",
           background: "#fff",
           borderRadius: 8,
-          border: "1px solid #e5e7eb",
+          // border: "1px solid #e5e7eb",
           overflow: "hidden",
         }}
       >
