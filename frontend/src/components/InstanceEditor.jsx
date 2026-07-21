@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState, useRef } from "react"
 import { fetchInstance, predictInstanceWithChanges } from "../api.js"
+import html2canvas from "html2canvas"
 
 const FEATURE_ORDER = [
   "Credit used (%)",
@@ -27,6 +28,9 @@ export default function InstanceEditor({ instanceId }) {
   const [prediction, setPrediction] = useState(null)
   const [originalPrediction, setOriginalPrediction] = useState(null)
   const [error, setError] = useState("")
+
+  // Ref to target the container we want to turn into a PDF
+  const printRef = useRef(null)
 
   // ----------------------------
   // Load instance
@@ -94,7 +98,6 @@ export default function InstanceEditor({ instanceId }) {
   // ----------------------------
   const changedFields = useMemo(() => {
     const out = {}
-
     for (const key of Object.keys(features)) {
       const newVal = features[key].value
       const oldVal = originalFeatures[key]?.value
@@ -103,7 +106,6 @@ export default function InstanceEditor({ instanceId }) {
         out[key] = Number(newVal)
       }
     }
-
     return out
   }, [features, originalFeatures])
 
@@ -150,6 +152,37 @@ export default function InstanceEditor({ instanceId }) {
   }
 
   // ----------------------------
+  // Export PNG Function
+  // ----------------------------
+  async function handleDownloadPng() {
+    if (!printRef.current) return;
+    
+    try {
+      const canvas = await html2canvas(printRef.current, {
+        scale: 5, // Increase for higher resolution (e.g., 3 or 4)
+        useCORS: true,
+        backgroundColor: "#ffffff"
+      });
+
+      // Get the image data directly from the canvas
+      const imgData = canvas.toDataURL("image/png");
+      
+      // Create a temporary link element to trigger the download
+      const link = document.createElement("a");
+      link.href = imgData;
+      link.download = `id${currentInstanceId}_profile.png`;
+      
+      // Append, click, and remove the link
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Failed to generate PNG", err);
+      setError("Failed to generate PNG");
+    }
+  }
+
+  // ----------------------------
   // UI
   // ----------------------------
   return (
@@ -178,6 +211,7 @@ export default function InstanceEditor({ instanceId }) {
 
       {/* Combined card */}
       <div
+        ref={printRef}
         style={{
           display: "flex",
           flexDirection: "column",
@@ -192,7 +226,7 @@ export default function InstanceEditor({ instanceId }) {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 12,
             padding: 8,
             borderBottom: "1px solid #e5e7eb",
             background: "#fff",
@@ -211,6 +245,25 @@ export default function InstanceEditor({ instanceId }) {
               {prediction != null ? Number(prediction).toFixed(0) : "—"}
             </b>
           </div>
+
+          {/* New PNG Download Button */}
+          {/* <button
+            data-html2canvas-ignore="true"
+            onClick={handleDownloadPng}
+            style={{
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              backgroundColor: "#10b981", // green
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              marginLeft: "10px"
+            }}
+          >
+            Save png
+          </button> */}
         </div>
 
         {/* Feature Grid */}

@@ -44,10 +44,12 @@ export default function MessageList({ messages, busy, status }) {
 
   useEffect(() => {
     if (lastUserMessageRef.current) {
-      lastUserMessageRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',   
-      });
+      setTimeout(() => {
+        lastUserMessageRef.current?.scrollIntoView({
+          behavior: 'auto', // 'auto' is instant, so LLM streaming won't interrupt it!
+          block: 'start',   // Aligns the top of the message with the top of the container
+        });
+      }, 50);
     }
   }, [lastUserIndex]); 
 
