@@ -103,7 +103,7 @@ explainer_tools = [
         "type": "function",
         "name": "generate_local_shap_bar_plot",
         "description": "Shows what factors pushed ONE specific applicant's predicted score up or down and by how much. "
-            "Use this when the user asks things like 'why is my score high/low?' or 'what factor was the most important for my application?'. "
+            "Use this when the user asks things like 'why is my score high/low?', 'what factor was the most important for my application?', 'did my number of loans positively/negatively affect my score?'. "
             "CRITICAL: If the user asks 'Why is factor X the most important?' or 'What is the most important factor?' while discussing their own profile or score, "
             "they are asking about LOCAL importance. Use this tool. "
             "This explanation applies only to the selected applicant and does NOT represent factor importance across applicants.", 
@@ -146,10 +146,10 @@ explainer_tools = [
         "name": "get_cp_plot",
         "description": "Shows how one applicant's predicted credit score changes when changing a single factor while all other factors are kept fixed at their original values. "
         "Use this tool when the user asks:"
-            "- 'How does this factor affect my score?'"
+            "- 'How changing this factor changes my score?'"
             "- 'What happens if I lower my Number of loans'"
             "- 'What if this factor was higher or lower?'"
-        "Note: This explanation only applies for a specific applicant, and only ONE factor is varied at a time. Feature must match a valid factor name exactly.",
+        "Note: This explanation only applies for a specific applicant, and only ONE factor is varied at a time. Feature must match a valid factor name exactly. MUST NOT use this to answer if a factor positively/negatively affected my score.",
         "parameters": CpPlot.model_json_schema(),
     },
     {
