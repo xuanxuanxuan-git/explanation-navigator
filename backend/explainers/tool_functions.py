@@ -511,7 +511,7 @@ def generate_all_cp_plots(instance_id: int, grid_points: int = 50):
     model = _STATE["model"]
     feature_ranges = _STATE["feature_ranges"]
 
-    features = list(X_test.columns)
+    features = list(feature_ranges.keys())
     num_features = len(features)
     
     # Calculate grid layout (e.g., 2 columns)

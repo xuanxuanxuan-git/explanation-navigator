@@ -125,9 +125,7 @@ const generateWelcomeMessage = (explanationKey) => {
 };
 
 export default function ChatPage() {
-  const [userInstanceId] = useState(58)
-
-  // Start with no explanation selected so the user is forced to pick one.
+  const [userInstanceId] = useState(57)
   const [selectedExplanation, setSelectedExplanation] = useState("")
 
   // Track whether the explanations menu is collapsed or expanded
@@ -153,7 +151,6 @@ export default function ChatPage() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
   const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
-  const messagesEndRef = useRef(null)
 
   // Keep a ref of the selected explanation to safely access inside async callbacks
   const selectedExpRef = useRef(selectedExplanation)
@@ -166,7 +163,6 @@ export default function ChatPage() {
     setMessages(prev => {
       const hasUserMsg = prev.some(m => m.role === 'user');
       if (hasUserMsg) return prev;
-
       return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanation) }];
     });
   }, [selectedExplanation]);
@@ -179,12 +175,6 @@ export default function ChatPage() {
       .catch(err => console.error("Error starting session:", err));
   }, []);
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, busy])
-
-  // Dynamically build the text describing what's visible
   const visibleTexts = useMemo(() => {
     if (!selectedExplanation) {
       return {
@@ -717,9 +707,8 @@ export default function ChatPage() {
                     </div>
                   </div>
                 )}
-
                 <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
-                  Choose one to explore more.
+                  Choose one to explore more, or ask any question.
                 </div>
               </div>
             </div>
@@ -782,7 +771,6 @@ export default function ChatPage() {
                     onClick={() => {
                       // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
-
                       let promptText = `The explanation currently shown is: ${visibleTexts.system}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
                       handleSend(promptText);
                     }}
@@ -795,7 +783,9 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div ref={messagesEndRef} />
+          {/* This spacer provides the empty room needed for the browser to scroll the latest message to the top */}
+          <div style={{ height: "80vh", flexShrink: 0 }} />
+
         </div>
 
         {/* Input */}
@@ -806,16 +796,9 @@ export default function ChatPage() {
         <style>
           {`
           @keyframes fadeSlide {
-            from {
-              opacity: 0;
-              transform: translate(-50%, -40%);
-            }
-            to {
-              opacity: 1;
-              transform: translate(-50%, -50%);
-            }
+            from { opacity: 0; transform: translate(-50%, -40%); }
+            to { opacity: 1; transform: translate(-50%, -50%); }
           }
-
           .suggestion-btn {
             padding: 10px 14px;
             border-radius: 8px;
@@ -825,11 +808,7 @@ export default function ChatPage() {
             transition: all 0.2s ease;
             text-align: center;
           }
-
-          .suggestion-btn:hover {
-            background: #2563eb !important;
-            color: white !important;
-          }
+          .suggestion-btn:hover { background: #2563eb !important; color: white !important; }
         `}
         </style>
       </div>

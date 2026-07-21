@@ -111,6 +111,3 @@ export default function MessageInput({ disabled, onSend }) {
     </div>
   )
 }
-
-
-//TODO: when the cursor goes up, the interface moved the cursor to the middle of the interface
