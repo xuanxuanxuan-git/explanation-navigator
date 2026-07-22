@@ -84,11 +84,20 @@ const DESIGN_C_QUESTIONS = {
       "How strongly does my score react to a specific factor?"
     ],
     doesntTellYou: [
-      "Why did I receive this score?",
       "Which factor affected my current score the most?",
+      "Did a factor positively affect the score I got?",
       "What is the smallest change needed to get approved?",
     ]
   }
+}
+
+// dashboard exploration list
+// Choose to explore which explanation can answer the question
+const DASHBOARD_QUESTIONS = {
+  message: "Explore which explanation can answer a question",
+  options: [
+
+  ],
 }
 
 // Dictionary to unify explanation labels for both the System Prompt and the UI Prompts
@@ -104,9 +113,9 @@ const EXPLANATION_DICT = {
     description: "the smallest change you could make to reach the target score"
   },
   cp: {
-    system: "How one applicant's credit score changes when changing a single factor",
+    system: "How one applicant's credit score will change when changing a single factor. CANNOT show if a factor positively or negatively affected the current score.",
     ui: "How Each Factor Affects Your Score",
-    description: "how changing one factor at a time would affect your score"
+    description: "how changing one factor at a time would change your score"
   },
   // global: {
   //   system: "Which factors matter the most across everyone",
@@ -218,17 +227,17 @@ export default function ChatPage() {
       - Loans not paid off (%) -- How many borrowing accounts still have debt on them
       - Months since last credit application -- How long since they last applied for credit
       
-      Currently, the user only has the following explanation visible on their dashboard: ${visibleTexts.ui} (${visibleTexts.system}). 
+      Currently, the user only has the following explanation visible on the dashboard on the left: ${visibleTexts.ui} (${visibleTexts.system}). 
       If the user refers to “this explanation,” “the chart,” or “the figure,” they mean this specific visible panel. Tailor your response to what is shown here, and do not imply that any other tools are visible on the dashboard. 
       IMPORTANT: You do NOT automatically know the data behind it. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Guidelines:
       - Be concise. Use layperson-friendly language. Answer in less than 200 words.
-      - AVOID ADDED ADVICE: Do not invent financial advice, guess missing values, or hallucinate results. Only describe relationships that are explicitly supported by the currently displayed explanation or by data returned from tools.
+      - AVOID ADDED ADVICE: Do not invent financial advice, guess missing values, or hallucinate results. Only describe relationships that are explicitly supported by the currently displayed explanation or by data returned from tools. If users ask for actions to take, describe in model's term.
       - If required inputs (e.g., factor name, target) are missing, ask the user to provide them.
       - Clearly distinguish between advice for a single applicant versus a broader pattern across applicants.
-      - PROACTIVE TOOL CALLING: If the user asks for information that cannot be answered using the currently displayed explanation and requires a different type of explanation (e.g., asking how to improve their score while viewing a current score breakdown), explicitly explain why the current explanation is insufficient, then immediately call the appropriate tool to provide the relevant explanation. Do not only tell the user that another explanation is needed.`
-  }, [userInstanceId, visibleTexts.system])
+      - PROACTIVE TOOL CALLING: If the user asks questions that cannot be answered using the currently displayed explanation and requires a different type of explanation (e.g., asking how to improve their score while viewing a current score breakdown), explicitly explain why the current explanation is insufficient, then MUST immediately call the appropriate tool to provide the relevant explanation. Do not only tell the user that another explanation is needed.`
+  }, [userInstanceId, visibleTexts.system, visibleTexts.ui])
 
   async function handleSend(text) {
     if (!text?.trim()) return

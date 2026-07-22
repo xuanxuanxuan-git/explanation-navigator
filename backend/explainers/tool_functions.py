@@ -688,7 +688,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
             x=grid,
             y=pdp_values,
             mode="lines",
-            line={"color": "#2563eb"},
+            line={"color": "#16a34a"},
             hovertemplate=f"{feature}: %{{x:.2f}}<br>Avg Prediction: %{{y:.0f}}<extra></extra>",
             showlegend=False,
         )
@@ -696,13 +696,15 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
 
     fig.update_layout(
         title={
-            "text": f"Average effect of {feature}<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How this factor affects the average predicted score</span>",
+            "text": f"<b>Average</b> effect of {feature}<br><span style='font-size: 13px; color: #6b7280; font-weight: normal;'>How this factor affects the <b>average</b> predicted score</span>",
             "font": {"size": 16},
             "y": 0.9,
         },
         xaxis={"title": feature, "range": [x_min, x_max], "gridcolor": "white"},
         yaxis={"title": "Average score", "title_standoff": 5, "range": [0, 100]},
         margin={"l": 60, "r": 30, "t": 73, "b": 40},
+        plot_bgcolor="#ecfded",
+        # paper_bgcolor="#ecfdf5" 
     )
     
     # Update y-axis to strictly use specific tickvals
@@ -710,7 +712,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
         range=[0, 100], 
         tickmode="array",
         tickvals=[0, 25, 50, 75, 100], 
-        gridcolor="white", # Contrasts with blue background
+        gridcolor="white", # Contrasts with green background
     )
     llm_grid = grid.tolist()[::2]
     llm_preds = pdp_values.tolist()[::2]
@@ -724,6 +726,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
         "data": {
             "feature": feature,
             "trend_data": llm_data_points,
+            "system_reminder": "the chart displayed BELOW shows how this factor affacts the average score across all applicants."
         },
         "visualisation": _plotly_payload(
             fig,

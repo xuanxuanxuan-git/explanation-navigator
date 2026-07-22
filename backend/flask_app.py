@@ -663,7 +663,7 @@ def chat_with_tools_stream():
             for chunk, done in llm_client.stream(
                 messages=messages_with_tools,
                 model=payload_model,
-                options={"temperature": 0.2},
+                options={"temperature": 0.1},
             ):
                 assistant_text += chunk
                 yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
