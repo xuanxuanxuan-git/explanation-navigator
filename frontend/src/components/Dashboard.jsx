@@ -52,19 +52,12 @@ export default function Dashboard({
   visualisations = [],
   counterfactualViz,
   cpVisualisations = [], // Data from chat stream (if LLM proactively calls it)
-  selectedExplanation = "" //[]
+  selectedExplanation = "" 
 }) {
-  //multiple choices
-  // const showLocal = selectedExplanations.includes("local");
-  // const showCF = selectedExplanations.includes("counterfactual");
-  // const showGlobal = selectedExplanations.includes("global");
-  // const showCP = selectedExplanations.includes("cp");
-
   const showLocal = selectedExplanation === "local";
   const showCF = selectedExplanation === "counterfactual";
   const showGlobal = selectedExplanation === "global";
   const showCP = selectedExplanation === "cp";
-
 
   /* SHAP state */
   const [shapViz, setShapViz] = useState(null)
@@ -230,7 +223,6 @@ export default function Dashboard({
 
   /* ---------- LOAD CP PLOTS ---------- */
   
-  // 1) Set state from proactive LLM generations if it matches
   useEffect(() => {
     if (cpVisualisations && cpVisualisations.length > 0) {
       const norm = normaliseVisualisation(
@@ -243,7 +235,7 @@ export default function Dashboard({
     }
   }, [cpVisualisations, instanceId])
 
-  // 2) Or auto-load it based on the dashboard checkbox
+  // Or auto-load it based on the dashboard checkbox
   useEffect(() => {
     // If we don't want to show it, do nothing
     if (!showCP) return
@@ -272,7 +264,7 @@ export default function Dashboard({
     loadCP()
 
     return () => { cancelled = true }
-  }, [instanceId, showCP]) // Removed cpViz and cpLoading from here!
+  }, [instanceId, showCP]) 
 
 
   /* ---------- EXTRA FIGURES ---------- */
@@ -318,27 +310,45 @@ export default function Dashboard({
 
   /* ---------- RENDER ---------- */
 
-  // Provide an empty state if no explanations are selected
-  if (!showLocal && !showCF && !showGlobal && !showCP && !hasExtra) {
-    return (
-      <div style={{ padding: 20, color: "#6b7280", textAlign: "center", fontSize: 13 }}>
-        No explanations selected. Please check options above.
-      </div>
-    );
-  }
-
   return (
     <div
       style={{
-        padding: 10,
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 0, //spacing under the horizontal bar
         height: "100%",
         boxSizing: "border-box",
         overflowY: "auto",
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid #dbe3ee",
       }}
     >
+      {/* Dashboard header */}
+      <div 
+        style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: 8, 
+          paddingBottom: 8,
+          borderBottom: "1px solid #e2e8f0" 
+        }}
+      >
+        <h2 style={{ 
+          margin: 4, 
+          fontSize: 16, 
+          fontFamily: '"Open Sans", Verdana, Arial, sans-serif'
+        }}>
+          Explanation Dashboard
+        </h2>
+      </div>
+
+      {/* Empty State */}
+      {!showLocal && !showCF && !showGlobal && !showCP && !hasExtra && (
+        <div style={{ padding: 20, color: "#6b7280", textAlign: "center", fontSize: 13 }}>
+          No explanations selected. Please check options above.
+        </div>
+      )}
 
       {/* ===== SHAP SECTION (Local) ===== */}
       {showLocal && (
@@ -356,7 +366,11 @@ export default function Dashboard({
           )}
 
           {shapViz?.type === "plotly" && (
-            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+            <div style={{ 
+              borderRadius: 12, 
+              overflow: "hidden", 
+              background: "#fff", // Keeps the figure background white so the layout doesn't break
+            }}>
               <Plot
                 data={shapViz.figure?.data || []}
                 layout={{
@@ -381,7 +395,11 @@ export default function Dashboard({
       {/* ===== COUNTERFACTUAL SECTION ===== */}
       {showCF && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff", overflow: "hidden" }}>
+          <div style={{ 
+            borderRadius: 12, 
+            background: "#fff", 
+            overflow: "hidden",
+          }}>
             {/* Target input bar */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#f8fafc", borderBottom: "1px solid #e5e7eb" }}>
               <label style={{ fontSize: 12, color: "#64748b", minWidth: 50 }}>
@@ -469,7 +487,11 @@ export default function Dashboard({
           )}
 
           {globalViz?.type === "plotly" && (
-            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+            <div style={{ 
+              borderRadius: 12, 
+              overflow: "hidden", 
+              background: "#fff", 
+            }}>
               <Plot
                 data={globalViz.figure?.data || []}
                 layout={{
@@ -507,12 +529,15 @@ export default function Dashboard({
           )}
 
           {cpViz?.type === "plotly" && (
-            <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", background: "#fff" }}>
+            <div style={{ 
+              borderRadius: 12, 
+              overflow: "hidden", 
+              background: "#fff", 
+            }}>
               <Plot
                 data={cpViz.figure?.data || []}
                 layout={{
                   autosize: true,
-                  // Height will be defined dynamically by the backend figure generation based on rows
                   height: cpViz.figure?.layout?.height || 500, 
                   ...(cpViz.figure?.layout || {}),
                 }}
@@ -529,12 +554,15 @@ export default function Dashboard({
         </div>
       )}
 
-
       {/* ===== EXTRA FIGURES CAROUSEL ===== */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {hasExtra && currentExtra?.type === "plotly" && (
           <>
-            <div style={{ borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb", background: "white" }}>
+            <div style={{ 
+              borderRadius: 12, 
+              overflow: "hidden", 
+              background: "#fff", 
+            }}>
               <Plot
                 data={currentExtra.figure?.data || []}
                 layout={{
@@ -561,7 +589,7 @@ export default function Dashboard({
                   aria-label="Previous"
                   style={{
                     width: 36, height: 36, borderRadius: "50%", border: "none",
-                    background: "#f3f4f6", cursor: vizIndex === 0 ? "default" : "pointer",
+                    background: "#e2e8f0", cursor: vizIndex === 0 ? "default" : "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     opacity: vizIndex === 0 ? 0.3 : 1,
                   }}
@@ -579,7 +607,7 @@ export default function Dashboard({
                       aria-label={`Go to ${i + 1}`}
                       style={{
                         width: 8, height: 8, padding: 0, borderRadius: "50%", border: "none",
-                        background: i === vizIndex ? "#111827" : "#d1d5db", cursor: "pointer",
+                        background: i === vizIndex ? "#111827" : "#cbd5e1", cursor: "pointer",
                       }}
                     />
                   ))}
@@ -591,7 +619,7 @@ export default function Dashboard({
                   aria-label="Next"
                   style={{
                     width: 36, height: 36, borderRadius: "50%", border: "none",
-                    background: "#f3f4f6", cursor: vizIndex === extraFigures.length - 1 ? "default" : "pointer",
+                    background: "#e2e8f0", cursor: vizIndex === extraFigures.length - 1 ? "default" : "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     opacity: vizIndex === extraFigures.length - 1 ? 0.3 : 1,
                   }}

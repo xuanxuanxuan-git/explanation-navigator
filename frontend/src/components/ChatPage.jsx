@@ -5,6 +5,7 @@ import { chatWithToolsStream } from '../api.js'
 import InstanceEditor from './InstanceEditor.jsx'
 import Dashboard from './Dashboard.jsx'
 
+/*
 // Which question would you like this explanation to help answer?
 const DESIGN_A_QUESTIONS = [
   "Why is my score so low?",
@@ -43,6 +44,7 @@ const DESIGN_B_CONTENT = {
     ],
   }
 }
+*/
 
 // What would you like to explore next?
 const DESIGN_C_QUESTIONS = {
@@ -133,27 +135,54 @@ const generateWelcomeMessage = (explanationKey) => {
   return `The interface currently displays **${info.ui}**, which shows ${info.description}. Let me know if you have any questions.`;
 };
 
+// Helper to read initial explanation from URL parameters
+const getInitialExplanation = () => {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const exp = params.get("explanation");
+    if (exp && EXPLANATION_DICT[exp]) {
+      return exp;
+    }
+  }
+  return "local"; // Default to "What Affected Your Score"
+};
+
+// Helper to read the applicant instance ID from URL parameters
+const getInitialInstanceId = () => {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id"); // e.g., ?id=58
+    if (id && !isNaN(parseInt(id, 10))) {
+      return parseInt(id, 10);
+    }
+  }
+  return 57; // Default ID
+};
+
 export default function ChatPage() {
-  const [userInstanceId] = useState(57)
+  // Initialize instance ID from URL
+  const [userInstanceId] = useState(getInitialInstanceId())
+  
   const applicantNames = { 57: "Alex", 58: "Bob" };
   const applicantName = applicantNames[userInstanceId];
   const applicantReference = applicantName
     ? `applicant ID ${userInstanceId} (${applicantName})`
     : `applicant ID ${userInstanceId}`;
   
-  const [selectedExplanation, setSelectedExplanation] = useState("")
+  // Set selected explanation from URL or default to 'local'
+  const [selectedExplanation, setSelectedExplanation] = useState(getInitialExplanation())
 
   // Track whether the explanations menu is collapsed or expanded
-  const [showExplanationsMenu, setShowExplanationsMenu] = useState(true)
+  // const [showExplanationsMenu, setShowExplanationsMenu] = useState(true)
 
   // Track which Design C and Design B questions have been clicked
   const [clickedQuestions, setClickedQuestions] = useState(new Set())
 
-  // Initialise with an empty string so the welcome message prompts selection.
+  // Initialise with the welcome message of the starting explanation
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: generateWelcomeMessage("")
+      content: generateWelcomeMessage(getInitialExplanation())
     }
   ])
 
@@ -165,7 +194,9 @@ export default function ChatPage() {
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [llmStage, setLlmStage] = useState("thinking")
-  const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
+  
+  // const [activeDesign, setActiveDesign] = useState("A") // Toggles A, B, or C
+  const activeDesign = "C" // Hardcoded to C as default
 
   // Keep a ref of the selected explanation to safely access inside async callbacks
   const selectedExpRef = useRef(selectedExplanation)
@@ -174,6 +205,7 @@ export default function ChatPage() {
   }, [selectedExplanation])
 
   // Update the initial message if the user clicks/toggles dashboard explanations BEFORE asking a question
+  /*
   useEffect(() => {
     setMessages(prev => {
       const hasUserMsg = prev.some(m => m.role === 'user');
@@ -181,6 +213,7 @@ export default function ChatPage() {
       return [{ role: 'assistant', content: generateWelcomeMessage(selectedExplanation) }];
     });
   }, [selectedExplanation]);
+  */
 
   // Start a new log session on initial page load / refresh
   useEffect(() => {
@@ -203,11 +236,13 @@ export default function ChatPage() {
     }
   }, [selectedExplanation])
 
+  /*
   // Dynamically compile Design B options based on the selected explanation
   const activeDesignBOptions = useMemo(() => {
     if (!selectedExplanation || !DESIGN_B_CONTENT.options[selectedExplanation]) return [];
     return DESIGN_B_CONTENT.options[selectedExplanation];
   }, [selectedExplanation]);
+  */
 
   // Dynamically compile Design C "tells you" questions
   const activeDesignCTellsYou = useMemo(() => {
@@ -304,8 +339,6 @@ export default function ChatPage() {
           }
 
           // Determine what goes into the chat timeline (inline)
-          // - If it's a "single_cp_plot", it ALWAYS goes in the chat.
-          // - If it's a dashboard plot (local, global, cf, cp_dashboard) but NOT currently selected, it goes in the chat.
           if (
             vizType === "extra" || 
             vizType === "single_cp_plot" || 
@@ -377,6 +410,7 @@ export default function ChatPage() {
     !busy &&
     messages.filter(m => m.role === "user").length === 0
 
+  /*
   // Only allow setting the selection if it is currently empty.
   const handleSelectExplanation = (key) => {
     if (!selectedExplanation) {
@@ -385,12 +419,13 @@ export default function ChatPage() {
   }
 
   // Calculate unclicked Design B options
-  const unclickedDesignBOptions = activeDesignBOptions.filter(opt => !clickedQuestions.has(opt));
+  const unclickedDesignBOptions = activeDesignBOptions?.filter(opt => !clickedQuestions.has(opt)) || [];
+  */
 
   return (
     <div style={{ display: "flex", gap: 12, height: "100%", padding: 12 }}>
 
-      {/* Left side: Instance editor, Selection Panel, Dashboard */}
+      {/* Left side: Instance editor, Dashboard */}
       <div
         style={{
           flex: 0.4,
@@ -398,6 +433,7 @@ export default function ChatPage() {
           flexDirection: "column",
           gap: 8,
           minWidth: 400,
+          paddingRight: 4 // slight breathing room before the chat
         }}
       >
         {/* Instance Editor */}
@@ -412,107 +448,24 @@ export default function ChatPage() {
           <InstanceEditor instanceId={userInstanceId} />
         </div>
 
-        {/* Explanations Selection Panel (COLLAPSIBLE) */}
+        {/* Dashboard Section */}
         <div
           style={{
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "#fafafa",
-          }}
-        >
-          {/* Clickable Header */}
-          <div
-            onClick={() => setShowExplanationsMenu(!showExplanationsMenu)}
-            style={{
-              padding: "12px 16px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              cursor: "pointer",
-              userSelect: "none"
-            }}
-          >
-            <div style={{ fontWeight: 600, fontSize: 13, color: "#475569" }}>
-              Explanation to display
-            </div>
-
-            {/* Chevron Icon */}
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#475569"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                transform: showExplanationsMenu ? "rotate(180deg)" : "rotate(0deg)",
-                transition: "transform 0.2s ease"
-              }}
-            >
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </div>
-
-          {/* Collapsible Content */}
-          {showExplanationsMenu && (
-            <div style={{
-              padding: "0px 16px 12px 16px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 6
-            }}>
-              {Object.keys(EXPLANATION_DICT).map((key) => {
-                // Disable all unselected options once a choice is made
-                const isSelectionLocked = selectedExplanation !== "";
-                const isCurrentKeyLockedOut = isSelectionLocked && selectedExplanation !== key;
-                
-                return (
-                  <label 
-                    key={key} 
-                    style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: 8, 
-                      fontSize: 13, 
-                      cursor: isSelectionLocked ? "default" : "pointer",
-                      color: isCurrentKeyLockedOut ? "#9ca3af" : "inherit"
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="explanationSelection"
-                      checked={selectedExplanation === key}
-                      onChange={() => handleSelectExplanation(key)}
-                      disabled={isSelectionLocked}
-                    />
-                    {EXPLANATION_DICT[key].ui}
-                  </label>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Dashboard */}
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "#fafafa",
-            overflow: "auto",
             flex: 1,
             minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          <Dashboard
-            instanceId={userInstanceId}
-            visualisations={visualisations}
-            counterfactualViz={counterfactualViz}
-            cpVisualisations={cpVisualisations}
-            selectedExplanation={selectedExplanation}
-          />
+          <div style={{ overflow: "auto", flex: 1, paddingTop: 6 }}>
+            <Dashboard
+              instanceId={userInstanceId}
+              visualisations={visualisations}
+              counterfactualViz={counterfactualViz}
+              cpVisualisations={cpVisualisations}
+              selectedExplanation={selectedExplanation}
+            />
+          </div>
         </div>
       </div>
 
@@ -527,6 +480,7 @@ export default function ChatPage() {
       >
 
         {/* Floating Design Switcher Buttons */}
+        {/* 
         {showInitialSuggestions && (
           <div
             style={{
@@ -560,6 +514,7 @@ export default function ChatPage() {
             ))}
           </div>
         )}
+        */}
 
         {/* Chat Container */}
         <div
@@ -709,6 +664,7 @@ export default function ChatPage() {
           )}
 
           {/* Persistent Box for Design B */}
+          {/*
           {activeDesign === "B" && !busy && selectedExplanation !== "" && unclickedDesignBOptions.length > 0 && (
             <div
               style={showInitialSuggestions ? {
@@ -742,7 +698,6 @@ export default function ChatPage() {
                 gap: 12,
               }}
             >
-              {/* Dynamic text based on whether it is the initial state or a subsequent turn */}
               {showInitialSuggestions ? (
                 <>
                   <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", textAlign: "center" }}>
@@ -763,9 +718,8 @@ export default function ChatPage() {
                   <div
                     key={idx}
                     onClick={() => {
-                      // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
-                      let promptText = `The explanation currently shown is: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                      let promptText = \`The explanation currently shown is: \${visibleTexts.ui}. The question is asking: "\${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "\${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "\${opt}".\`;
                       handleSend(promptText);
                     }}
                     className="suggestion-btn"
@@ -776,6 +730,7 @@ export default function ChatPage() {
               </div>
             </div>
           )}
+          */}
 
           {/* This spacer provides the empty room needed for the browser to scroll the latest message to the top */}
           <div style={{ height: "80vh", flexShrink: 0 }} />

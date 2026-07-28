@@ -208,43 +208,35 @@ export default function InstanceEditor({ instanceId }) {
         </div>
       )}
 
-      {/* Combined card */}
-      <div
-        ref={printRef}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          background: "#fff",
-          borderRadius: 8,
-          // border: "1px solid #e5e7eb",
-          overflow: "hidden",
-          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
-        }}
-      >
-        {/* Header */}
+        {/* Header Container */}
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: 12, // slightly more padding for a better look
-            borderBottom: "1px solid #e5e7eb",
             background: "#fff",
             position: "sticky",
             top: 0,
             zIndex: 1,
+            padding: "16px 16px 0 16px", // Space inside the card around the header
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
-            Applicant ID: {currentInstanceId}
-          </span>
+          {/* Header Content */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              paddingBottom: "12px", // Space between text and the line
+              borderBottom: "1px solid #e2e8f0", // The line itself (now constrained by parent padding)
+            }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
+              Applicant ID: {currentInstanceId}
+            </span>
 
-          <div style={{ marginLeft: "auto", fontSize: 13, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
-            <span style={{ fontWeight: 600 }}>Credit Score: </span>
-            <b>
-              {prediction != null ? Number(prediction).toFixed(0) : "—"}
-            </b>
-          </div>
+            <div style={{ marginLeft: "auto", fontSize: 14, fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
+              <span style={{ fontWeight: 600 }}>Credit Score: </span>
+              <b>
+                {prediction != null ? Number(prediction).toFixed(0) : "—"}
+              </b>
+            </div>
 
           {/* New PNG Download Button */}
           {/* <button
@@ -274,7 +266,7 @@ export default function InstanceEditor({ instanceId }) {
             gap: 8,
             maxHeight: 320,
             overflowY: "auto",
-            padding: 8,
+            padding: "8px 0 8px 0",
             background: "#fff",
           }}
         >
@@ -302,7 +294,7 @@ export default function InstanceEditor({ instanceId }) {
                 }}
               >
                 {/* Feature name */}
-                <label style={{ fontSize: 11, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
+                <label style={{ fontSize: 12, color: "#111827", fontFamily: '"Open Sans", Verdana, Arial, sans-serif' }}>
                   {name}
                 </label>
 
@@ -319,7 +311,7 @@ export default function InstanceEditor({ instanceId }) {
                   {/* Min */}
                   <span
                     style={{
-                      fontSize: 10,
+                      fontSize: 11,
                       color: "#9ca3af",
                       textAlign: "right",
                     }}
@@ -351,7 +343,7 @@ export default function InstanceEditor({ instanceId }) {
                   {/* Max */}
                   <span
                     style={{
-                      fontSize: 10,
+                      fontSize: 11,
                       color: "#9ca3af",
                     }}
                   >
