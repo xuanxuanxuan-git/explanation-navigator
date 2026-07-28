@@ -765,7 +765,7 @@ export default function ChatPage() {
                     onClick={() => {
                       // Mark this option as clicked
                       setClickedQuestions(prev => new Set(prev).add(opt));
-                      let promptText = `The explanation currently shown is: ${visibleTexts.system}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
+                      let promptText = `The explanation currently shown is: ${visibleTexts.ui}. The question is asking: "${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "${opt}".`;
                       handleSend(promptText);
                     }}
                     className="suggestion-btn"
