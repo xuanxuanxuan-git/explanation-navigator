@@ -7,6 +7,8 @@ import {
   generateAllCpPlots,
 } from "../api.js";
 
+// TODO: change to global ft importance
+// TODO: add exp a b c 
 // Helper to standardise the Plotly object
 function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
   if (!viz) return null;

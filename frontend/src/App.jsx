@@ -22,7 +22,7 @@ export default function App() {
 
   // Otherwise, render your normal Chat app
   return (
-    <div style={{ fontFamily: 'system-ui, Arial', padding: 18, height: "87vh", maxWidth: 1300, minWidth: 800, margin: "0 auto"}}>
+    <div style={{ fontFamily: 'system-ui, Arial', padding: 18, height: "87vh", maxWidth: 1300, minWidth: 800, minHeight: 700, margin: "0 auto"}}>
       <h2 style={{ marginTop:10, marginBottom: 8, marginLeft: 14}}>AI Chatbot</h2>
       <ChatPage />
     </div>

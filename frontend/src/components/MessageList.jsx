@@ -1,7 +1,52 @@
 import React, { useEffect, useRef } from 'react'
-import TypingStatus from './TypingStatus.jsx'
 import ReactMarkdown from 'react-markdown'
 import Plot from 'react-plotly.js'
+
+function TypingStatus() {
+  return (
+    <>
+      <div
+        className="typing-status"
+        style={{
+          color: "#6b7280",
+        }}
+      >
+        Thinking...
+      </div>
+      <style>{`
+        .typing-status {
+          font-size: 14px;
+          font-weight: 500;
+          opacity: 0.9;
+          
+          background: linear-gradient(
+            90deg,
+            currentColor 25%,
+            rgba(255,255,255,0.2) 50%,
+            currentColor 75%
+          );
+          
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text; 
+          color: currentColor;   
+
+          animation: typingShimmer 3.5s linear infinite;
+        }
+
+        @keyframes typingShimmer {
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
+        }
+      `}</style>
+    </>
+  )
+}
 
 // Reuse Dashboard normalisation logic here to ensure the plot renders correctly
 function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
@@ -37,7 +82,7 @@ function normaliseVisualisation(viz, fallbackTitle = "Visualisation") {
   return null
 }
 
-export default function MessageList({ messages, busy, status }) {
+export default function MessageList({ messages, busy }) {
   const lastUserMessageRef = useRef(null);
 
   const lastUserIndex = messages.map(m => m.role).lastIndexOf('user');
@@ -51,13 +96,13 @@ export default function MessageList({ messages, busy, status }) {
         });
       }, 50);
     }
-  }, [lastUserIndex]); 
+  }, [lastUserIndex]);
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      gap: 10, 
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 10,
     }}>
       {messages.map((m, idx) => {
         const isLastUser = idx === lastUserIndex;
@@ -72,16 +117,16 @@ export default function MessageList({ messages, busy, status }) {
               padding: '10px 12px',
               borderRadius: 12,
               background: m.role === 'user' ? '#e8f0fe' : '#f5f5f5',
-              scrollMarginTop: "10px" 
+              scrollMarginTop: "10px"
             }}
           >
             <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 4 }}>
               {m.role}
             </div>
-            
+
             <div className="markdown-body" style={{ fontSize: 14 }}>
               {m.role === 'assistant' && !m.content && busy ? (
-                <TypingStatus status={status}/>
+                <TypingStatus />
               ) : (
                 <ReactMarkdown>{m.content}</ReactMarkdown>
               )}
@@ -94,12 +139,12 @@ export default function MessageList({ messages, busy, status }) {
                   if (!norm || norm.type !== 'plotly') return null;
 
                   return (
-                    <div 
-                      key={vIdx} 
+                    <div
+                      key={vIdx}
                       style={{
-                        width: "85%",           
-                        maxWidth: 450,          
-                        margin: "0 auto",       
+                        width: "85%",
+                        maxWidth: 450,
+                        margin: "0 auto",
                         borderRadius: 10,
                         overflow: "hidden",
                         border: "1px solid #e5e7eb",
@@ -130,7 +175,7 @@ export default function MessageList({ messages, busy, status }) {
           </div>
         )
       })}
-      
+
       {/* Styles for better Markdown spacing inside chat bubbles */}
       <style>{`
         .markdown-body p:first-of-type { margin-top: 0; }
