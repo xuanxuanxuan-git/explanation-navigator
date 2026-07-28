@@ -188,7 +188,6 @@ export default function InstanceEditor({ instanceId }) {
   return (
     <div
       style={{
-        padding: 12,
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -219,6 +218,7 @@ export default function InstanceEditor({ instanceId }) {
           borderRadius: 8,
           // border: "1px solid #e5e7eb",
           overflow: "hidden",
+          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
         }}
       >
         {/* Header */}
@@ -227,7 +227,7 @@ export default function InstanceEditor({ instanceId }) {
             display: "flex",
             alignItems: "center",
             gap: 12,
-            padding: 8,
+            padding: 12, // slightly more padding for a better look
             borderBottom: "1px solid #e5e7eb",
             background: "#fff",
             position: "sticky",
@@ -274,7 +274,7 @@ export default function InstanceEditor({ instanceId }) {
             gap: 8,
             maxHeight: 320,
             overflowY: "auto",
-            padding: 6,
+            padding: 8,
             background: "#fff",
           }}
         >
