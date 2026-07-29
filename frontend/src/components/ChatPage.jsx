@@ -47,7 +47,7 @@ const DESIGN_B_CONTENT = {
 */
 
 // What would you like to explore next?
-const DESIGN_C_QUESTIONS = {
+const COVERAGE_QUESTIONS = {
   local: {
     tellsYou: [
       "What factors lowered/increased my score?",
@@ -93,6 +93,31 @@ const DESIGN_C_QUESTIONS = {
   }
 }
 
+const DESIGN_C_QUESTIONS = {
+  local: {
+    tellsYou: [
+      "Which factor had the biggest impact on the score I got?",
+      "Did my credit used positively affect the score I got?",
+    ],
+    doesntTellYou: [
+      "What can I do to improve my score to 50?",
+      "Which factors are generally important across all applicants?",
+      "How would my score change if I have more loans?",
+    ]
+  },
+  cp: {
+    tellsYou: [
+      "How would my score change if I have more loans?",
+      "How strongly does my score react to a specific factor?"
+    ],
+    doesntTellYou: [
+      "Which factor had the biggest impact on the score I got?",
+      "Did my credit used positively affect the score I got?",
+      "For other applicants, does increasing on-time payment rate increases their score?",
+    ]
+  } 
+}
+
 // dashboard exploration list
 // Choose to explore which explanation can answer the question
 const DASHBOARD_QUESTIONS = {
@@ -129,17 +154,17 @@ const EXPLANATION_DICT = {
 // Helper to dynamically generate the welcome message based on the selected explanation
 const generateWelcomeMessage = (explanationKey) => {
   if (!explanationKey) {
-    return "The interface currently displays no explanation. Please select an explanation from the menu to begin.";
+    return "The dashboard currently displays no explanation. Please select an explanation from the menu to begin.";
   }
   const info = EXPLANATION_DICT[explanationKey];
-  return `The interface currently displays **${info.ui}**, which shows ${info.description}. Let me know if you have any questions.`;
+  return `The dashboard currently displays **${info.ui}**, which shows ${info.description}. Let me know if you have any questions.`;
 };
 
 // Helper to read initial explanation from URL parameters
 const getInitialExplanation = () => {
   if (typeof window !== "undefined") {
     const params = new URLSearchParams(window.location.search);
-    const exp = params.get("explanation");
+    const exp = params.get("exp");
     if (exp && EXPLANATION_DICT[exp]) {
       return exp;
     }
@@ -156,7 +181,7 @@ const getInitialInstanceId = () => {
       return parseInt(id, 10);
     }
   }
-  return 57; // Default ID
+  return 12; // Default ID
 };
 
 const getParticipantId = () => {
@@ -420,9 +445,9 @@ export default function ChatPage() {
 
     let promptText = ""
     if (category === "tellsYou") {
-      promptText = `The explanation currently shown: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CAN answer". Explain why the currently shown explanation can answer this question, and also tell me the answer.`
+      promptText = `The explanation currently shown: ${visibleTexts.ui}. I chose the question: "${q}" under the category "This explanation CAN answer". Explain why the currently shown explanation can answer this question, and also tell me the answer.`
     } else {
-      promptText = `The explanation currently shown: ${visibleTexts.ui}. I clicked the question: "${q}" under the category "This explanation CANNOT answer". Explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
+      promptText = `The explanation currently shown: ${visibleTexts.ui}. I chose the question: "${q}" under the category "This explanation CANNOT answer". Explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
     }
 
     handleSend(promptText)
@@ -575,7 +600,6 @@ export default function ChatPage() {
                 flexDirection: "column",
                 gap: 12,
                 animation: "fadeSlide 0.4s ease forwards",
-                zIndex: 10,
               } : {
                 width: "80%",
                 maxWidth: 450,
@@ -786,7 +810,7 @@ export default function ChatPage() {
               ) : (
                 <>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                  <span>{requiredQuestions - userMessageCount} question{requiredQuestions - userMessageCount !== 1 ? 's' : ''} left to continue the survey</span>
+                  <span>{requiredQuestions - userMessageCount} question{requiredQuestions - userMessageCount !== 1 ? 's' : ''} left to continue</span>
                 </>
               )}
             </div>
