@@ -263,7 +263,7 @@ export default function InstanceEditor({ instanceId }) {
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: 8,
+            gap: 10,
             maxHeight: 320,
             overflowY: "auto",
             padding: "8px 0 8px 0",
@@ -288,7 +288,7 @@ export default function InstanceEditor({ instanceId }) {
                   display: "flex",
                   flexDirection: "column",
                   gap: 2,
-                  padding: 6,
+                  padding: "6px 0 6px 0",
                   borderRadius: 6,
                   background: isChanged ? "#eef4ff" : "#fff",
                 }}

@@ -2,14 +2,24 @@
 
 const BASE_URL = import.meta.env.VITE_BACKEND_URL
 
-// Generate a unique ID with the exact format: log_YYYYMMDD_HHMMSS_user_random
+// Generate a unique ID with the exact format: log_YYYYMMDD_HHMMSS_user_pid
 const SESSION_ID = (() => {
   const d = new Date();
   const pad = (n) => n.toString().padStart(2, '0');
   const dateStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
   const timeStr = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-  const randomStr = Math.random().toString(36).substring(2, 9);
-  return `log_${dateStr}_${timeStr}_user_${randomStr}`;
+  
+  // Try to grab the Prolific ID from the URL
+  let pid = null;
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    pid = params.get('pid');
+  }
+  
+  // If pid exists, use it. Otherwise, generate a random string as a fallback.
+  const userIdentifier = pid ? pid : Math.random().toString(36).substring(2, 9);
+  
+  return `log_${dateStr}_${timeStr}_user_${userIdentifier}`;
 })();
 
 export async function health() {

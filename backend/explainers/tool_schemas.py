@@ -102,7 +102,7 @@ explainer_tools = [
     {
         "type": "function",
         "name": "generate_local_shap_bar_plot",
-        "description": "Shows what factors pushed ONE specific applicant's predicted score up or down and by how much. "
+        "description": "Generates 'What affected your score' chart for ONE specific applicant. Shows what factors pushed ONE specific applicant's predicted score up or down and by how much. "
             "Use this when the user asks things like 'why is my score high/low?', 'what factor was the most important for my application?', 'did my number of loans positively/negatively affect my score?'. "
             "CRITICAL: If the user asks 'Why is factor X the most important?' or 'What is the most important factor?' while discussing their own profile or score, "
             "they are asking about LOCAL importance. Use this tool. "
@@ -114,7 +114,7 @@ explainer_tools = [
         "type": "function",
         "name": "generate_global_subgroup_shap_plot",
         "description": """
-            Shows which factors matter the most on average, or across a specific group of people. 
+            Generates 'What mattered most overall' chart across many applicants. Shows which factors matter the most on average, or across a specific group of people. 
             Use this ONLY when the user explicitly asks about general system rules or average applicants, such as:
             - "Which factors are most important in the model?"
             - "What factors matter most on average?"
@@ -145,7 +145,7 @@ explainer_tools = [
     {
         "type": "function",
         "name": "get_cp_plot",
-        "description": "Shows how one applicant's predicted credit score changes when changing a single factor while all other factors are kept fixed at their original values. "
+        "description": "Generates 'How changing one factor affects your score' chart for a specific applicant. Shows how that applicant's predicted credit score changes when changing a single factor while all other factors are kept fixed at their original values. "
         "Use this tool when the user asks:"
             "- 'How changing this factor changes my score?'"
             "- 'What happens if I lower my Number of loans'"
@@ -273,7 +273,7 @@ explainer_tools = [
         "type": "function",
         "name": "get_counterfactual_explanation",
         "description": (
-            "Calculates the smallest changes a user can make to improve their credit score to a target value. "
+            "Calculates the smallest changes a user can make to improve their credit score to a target value. Also generates 'How to improve your score' chart for this applicant. "
             "Emphasise that this represents the MINIMUM required changes, but these specific changes must be implemented simultaneously to reach the target score. Individual changes should NOT be interpreted in isolation. "
             "Only include `target` if the user explicitly specifies a desired score."
             "Use this tool when the user asks: "
@@ -288,7 +288,7 @@ explainer_tools = [
         "type": "function",
         "name": "get_partial_dependence_plot",
         "description": (
-            "Shows the general trend of how a specific factor affects scores across everyone in the system. "
+            "Generates 'Average effect of a factor' chart. Shows the general trend of how a specific factor affects scores across everyone in the system. "
             "Use this when user wants to understand the general, system-wide rule for a factor, independent of their own personal profile. e.g.: "
             "- 'How does a clean repayment history (On-time payment rate (%)) affect the score overall?' "
             "- 'What is the effect of recent applications (Months since last credit application) on average?' "

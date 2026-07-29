@@ -659,23 +659,29 @@ def chat_with_tools_stream():
         payload_model = data.get("final_model") or data.get("model")
 
         def generate():
-            assistant_text = ""
-            for chunk, done in llm_client.stream(
-                messages=messages_with_tools,
-                model=payload_model,
-                options={"temperature": 0.1},
-            ):
-                assistant_text += chunk
-                yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
+            try:
+                assistant_text = ""
+                for chunk, done in llm_client.stream(
+                    messages=messages_with_tools,
+                    model=payload_model,
+                    options={"temperature": 0.1},
+                ):
+                    assistant_text += chunk
+                    yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
 
-                if done:
-                    _shorten_messages(messages_with_tools, num_tools)
-                    messages_with_tools.append({"role": "assistant", "content": assistant_text})
-                    log_user_action(session_id, f"Complete message saved: {messages_with_tools}")
-                    
-                    yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
-                    yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
-                    return
+                    if done:
+                        _shorten_messages(messages_with_tools, num_tools)
+                        messages_with_tools.append({"role": "assistant", "content": assistant_text})
+                        log_user_action(session_id, f"Complete message saved: {messages_with_tools}")
+                        
+                        yield f"event: visualisations\ndata: {json.dumps({'visualisations': visualisations})}\n\n"
+                        yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
+                        return
+            except Exception as e:
+                # IMPORTANT: If LLM fails during stream, log it but emit a done event to unlock the UI
+                log_user_action(session_id, f"STREAMING ERROR: {str(e)}")
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                yield f"event: done\ndata: {json.dumps({'done': True, 'history': messages_with_tools})}\n\n"
 
         return Response(generate(), mimetype="text/event-stream")
 
@@ -719,19 +725,25 @@ def chat_stream():
     # }
 
     def generate():
-        assistant_text = ""
-        for chunk, done in llm_client.stream(
-            messages=messages,
-            model=data.get("model"),
-            options=data.get("options") or {"temperature": 1},
-        ):
-            assistant_text += chunk
-            yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
+        try:
+            assistant_text = ""
+            for chunk, done in llm_client.stream(
+                messages=messages,
+                model=data.get("model"),
+                options=data.get("options") or {"temperature": 1},
+            ):
+                assistant_text += chunk
+                yield f"event: token\ndata: {json.dumps({'token': chunk, 'done': done})}\n\n"
 
-            if done:
-                log_user_action(session_id, f"LLM REPLIED: {assistant_text}")
-                yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
-                return
+                if done:
+                    log_user_action(session_id, f"LLM REPLIED: {assistant_text}")
+                    yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
+                    return
+        except Exception as e:
+            # IMPORTANT: Unlock UI on stream failure
+            log_user_action(session_id, f"STREAMING ERROR: {str(e)}")
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            yield f"event: done\ndata: {json.dumps({'done': True})}\n\n"
 
     return Response(generate(), mimetype="text/event-stream")
 
