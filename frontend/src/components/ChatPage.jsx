@@ -115,7 +115,7 @@ const DESIGN_C_QUESTIONS = {
       "Did my credit used positively affect the score I got?",
       "For other applicants, does increasing on-time payment rate increases their score?",
     ]
-  }
+  } 
 }
 
 // dashboard exploration list
@@ -200,7 +200,7 @@ const getRequiredQuestions = () => {
       return parseInt(req, 10);
     }
   }
-  return 3;
+  return 3; 
 };
 
 
@@ -209,13 +209,13 @@ export default function ChatPage() {
   const [userInstanceId] = useState(getInitialInstanceId())
   const [participantId] = useState(getParticipantId());
   const [requiredQuestions] = useState(getRequiredQuestions());
-
+  
   const applicantNames = { 57: "Alex", 58: "Bob" };
   const applicantName = applicantNames[userInstanceId];
   const applicantReference = applicantName
     ? `applicant ID ${userInstanceId} (${applicantName})`
     : `applicant ID ${userInstanceId}`;
-
+  
   // Set selected explanation from URL or default to 'local'
   const [selectedExplanation, setSelectedExplanation] = useState(getInitialExplanation())
 
@@ -239,7 +239,7 @@ export default function ChatPage() {
   const [cpVisualisations, setCpVisualisations] = useState([])
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
-
+  
   const activeDesign = "C" // Hardcoded to C as default
 
   // --- QUALTRICS TRACKING LOGIC ---
@@ -369,12 +369,12 @@ export default function ChatPage() {
 
         vizs.forEach(v => {
           const tool = v?.meta?.tool || v?.visualisation?.meta?.tool
-
+          
           let vizType = "extra"
           if (tool === "get_counterfactual_explanation") vizType = "counterfactual"
           if (tool === "generate_shap_bar_plot" || tool === "generate_local_shap_bar_plot") vizType = "local"
           if (tool === "generate_shap_summary_plot") vizType = "global"
-
+          
           // Separate single CP plots from the "All CP plots" view
           if (tool === "generate_all_cp_plots") vizType = "cp_dashboard"
           if (tool === "get_cp_plot") vizType = "single_cp_plot"
@@ -388,8 +388,8 @@ export default function ChatPage() {
 
           // Determine what goes into the chat timeline (inline)
           if (
-            vizType === "extra" ||
-            vizType === "single_cp_plot" ||
+            vizType === "extra" || 
+            vizType === "single_cp_plot" || 
             (vizType === "cp_dashboard" && selectedExpRef.current !== "cp") ||
             (vizType === "local" && selectedExpRef.current !== "local") ||
             (vizType === "global" && selectedExpRef.current !== "global") ||
@@ -505,7 +505,7 @@ export default function ChatPage() {
             flexDirection: "column",
           }}
         >
-          <div style={{ overflow: "auto", flex: 1 }}>
+          <div style={{ overflow: "auto", flex: 1}}>
             <Dashboard
               instanceId={userInstanceId}
               visualisations={visualisations}
@@ -586,9 +586,12 @@ export default function ChatPage() {
             <div
               style={showInitialSuggestions ? {
                 position: "absolute",
-                top: 120,
-                left: "50%",
-                transform: "translateX(-50%)",
+                top: 90,           /* Hard ceiling: box will NEVER go higher than 90px from the top */
+                bottom: 20,        /* Pulls from the bottom so the margin can calculate the center */
+                left: 0,
+                right: 0,
+                margin: "auto",    /* Magically centers the box vertically and horizontally */
+                height: "fit-content", /* Required for vertical margin: auto to work */
                 width: "80%",
                 maxWidth: 450,
                 background: "white",
@@ -599,8 +602,10 @@ export default function ChatPage() {
                 display: "flex",
                 flexDirection: "column",
                 gap: 12,
-                animation: "fadeSlide 0.4s ease forwards",
+                animation: "fadePop 0.4s ease forwards",
+                zIndex: 10,
               } : {
+                /* This is the state AFTER messages are sent - stays at the bottom naturally */
                 width: "80%",
                 maxWidth: 450,
                 margin: "20px auto 0 auto",
@@ -786,7 +791,7 @@ export default function ChatPage() {
 
         {/* Input Area */}
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-
+          
           {/* Compact Qualtrics Progress Badge */}
           <div style={{ display: "flex", justifyContent: "center" }}>
             <div style={{
@@ -821,9 +826,9 @@ export default function ChatPage() {
 
         <style>
           {`
-          @keyframes fadeDrop {
-            from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+          @keyframes fadePop {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
           }
           .suggestion-btn {
             padding: 10px 14px;
