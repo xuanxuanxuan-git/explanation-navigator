@@ -703,7 +703,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
         xaxis={"title": feature, "range": [x_min, x_max], "gridcolor": "white"},
         yaxis={"title": "Average score", "title_standoff": 5, "range": [0, 100]},
         margin={"l": 60, "r": 30, "t": 73, "b": 40},
-        plot_bgcolor="#ecfded",
+        plot_bgcolor="#f2f7f2",
         # paper_bgcolor="#ecfdf5" 
     )
     
