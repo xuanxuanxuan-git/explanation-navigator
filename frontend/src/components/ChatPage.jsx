@@ -285,7 +285,7 @@ export default function ChatPage() {
       - Months since last credit application -- How long since they last applied for credit
       
       Currently, the user only has the following explanation visible on the dashboard on the left: ${visibleTexts.ui} (${visibleTexts.system}). 
-      If the user refers to “this explanation,” “the chart,” or “the figure,” they mean this specific visible panel. Tailor your response to what is shown here, and do not imply that any other tools are visible on the dashboard. 
+      If the user mentions “this explanation,” “the chart,” or “the figure,” they always refer to this visible panel ${visibleTexts.ui}. Tailor your response to what is shown here, and do not imply that any other tools are visible on the dashboard. 
       IMPORTANT: You do NOT automatically know the data behind it. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
 
       Guidelines:
