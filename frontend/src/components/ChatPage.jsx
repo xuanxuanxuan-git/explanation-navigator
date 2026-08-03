@@ -884,8 +884,17 @@ export default function ChatPage() {
               ✕
             </button>
 
-            <h2 style={{ marginTop: 0, color: "#111827" }}>Your task</h2>
-            Chat with the assistant to find out what kinds of questions the displayed explanation can answer. Ak
+            <div style={{ 
+              backgroundColor: "#eff6ff", 
+              borderLeft: "4px solid #2563eb", 
+              padding: "12px 16px", 
+              borderRadius: "0 8px 8px 0",
+              margin: "10px 0 24px 0" 
+            }}>
+              <p style={{ fontSize: "15px", color: "#1e3a8a", margin: 0, fontWeight: 500 }}>
+                Chat with the assistant to find out what kinds of questions the displayed explanation can answer.
+              </p>
+            </div>
 
             <h2 style={{ marginTop: 0, color: "#111827" }}>How to use this tool</h2>
 
@@ -937,10 +946,15 @@ export default function ChatPage() {
               <p style={{ margin: "5px 0" }}>Displays one explanation chart explaining the AI's decision.</p>
 
               <h3 style={{ fontSize: "15px", marginTop: "20px", color: "#2563eb" }}>3. AI Assistant Chat (Right)</h3>
-              <p style={{ margin: "5px 0" }}>Ask the assistant about your score. <b>To begin:</b> click through the suggested questions in the center menu to learn what the current chart can and cannot answer. Ask three more questions to proceed with the survey.
-              You can ask questions like:
-              - 
+              <p style={{ margin: "5px 0" }}>
+                Ask the assistant about the explanation chart. <b>To begin:</b> click through the suggested questions in the center menu to learn what the current chart can and cannot answer. Ask three more questions to proceed with the survey.
               </p>
+              <p style={{ margin: "5px 0" }}>You can ask questions like:</p>
+              <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
+                <li>"Does this explanation only describe this applicant's result, or does it also show patterns across many applicants?"</li>
+                <li>"Can this explanation tell me which factor the AI usually considers the most important across all applicants?"</li>
+                <li>"How would my score change if I have fewer loans?"</li>
+              </ul>
             </div>
 
             <button
