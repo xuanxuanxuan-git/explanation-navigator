@@ -726,7 +726,7 @@ def get_partial_dependence_plot(feature: str, grid_points: int = 101):
         "data": {
             "feature": feature,
             "trend_data": llm_data_points,
-            "system_reminder": "the chart displayed BELOW shows how this factor affacts the average score across all applicants."
+            "reminder": "the chart returned shows how this factor affacts the average score across all applicants."
         },
         "visualisation": _plotly_payload(
             fig,
