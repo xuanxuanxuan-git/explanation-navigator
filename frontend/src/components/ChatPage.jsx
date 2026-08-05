@@ -960,6 +960,7 @@ export default function ChatPage() {
               <p style={{ margin: "5px 0" }}>You can ask questions like:</p>
               <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
                 <li>"Does this explanation only describe this applicant's result, or does it also show patterns across many applicants?"</li>
+                <li>"Does this explanation show how important each factor is to my current score?"</li>
                 <li>"Can this explanation tell me which factor the AI usually considers the most important across all applicants?"</li>
                 <li>"How would my score change if I have fewer loans?"</li>
               </ul>
