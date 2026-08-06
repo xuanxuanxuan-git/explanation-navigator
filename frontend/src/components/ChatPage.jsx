@@ -190,6 +190,9 @@ export default function ChatPage() {
   const [backendHistory, setBackendHistory] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(true)
 
+  // State to track if the input box is focused to show/hide suggestions
+  const [isInputFocused, setIsInputFocused] = useState(false)
+
   const activeDesign = "C" // Hardcoded to C as default
 
   // Dynamically compile Design C "tells you" questions 
@@ -285,25 +288,62 @@ export default function ChatPage() {
       - Months since last credit application -- How long since they last applied for credit
       
       Currently, the user only has the following explanation visible on the dashboard on the left: ${visibleTexts.ui} (${visibleTexts.system}). 
-      If the user mentions “this explanation,” “the chart,” or “the figure,” MUST ALWAYS refer it to the visible ${visibleTexts.ui} panel. Tailor your response to what is shown here. Always call the corresponding tool if the response is not based on currently visible chart.  
-      IMPORTANT: You do NOT automatically know the data behind it. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
+      When the user refers to "this explanation", "this chart", or "this figure", ALWAYS interpret it as the currently visible ${visibleTexts.ui} panel.   
+      IMPORTANT: You do NOT automatically know the data behind the explanation. You MUST call the corresponding tool(s) to retrieve the data for this visible explanation so you can accurately understand the outputs and answer the user's questions. 
+
+      FOR EVERY USER QUESTION, FOLLOW THIS WORKFLOW
+      Step 1. Identify the user's information need.
+
+      Determine what the user is actually trying to learn (for example:
+      - understand why the model made this decision
+      - understand which factors mattered most
+      - understand what changes would improve their score
+      - understand the model's general behaviour
+      ).
+
+      Step 2. Evaluate whether the CURRENTLY DISPLAYED explanation ${visibleTexts.ui} can answer the question.
+
+      Ask yourself:
+      "Can this explanation directly answer the user's question based on how it is generated?"
+
+      If YES:
+      - Explicitly state that your answer is based on the currently displayed ${visibleTexts.ui} explanation.
+      - Call the corresponding tool if its underlying data is required.
+      - Answer using only information supported by that explanation.
+
+      If NO:
+      You MUST do ALL of the following:
+      (1) Explain why the displayed explanation cannot answer the question.
+      Describe the limitation in terms of how the explanation is generated, not simply that it is the wrong chart.
+
+      Examples:
+      - "This chart shows which factors influenced your current prediction, so it cannot predict what would happen if you changed a feature."
+      - "This explanation compares your data with other applicants, so it cannot tell you which change would most improve your score."
+      - "This chart explains this individual prediction, not overall patterns across applicants."
+
+      (2) State the assumption or scope of the current explanation.
+
+      For example:
+      - It ranks feature contributions.
+      - It is descriptive rather than hypothetical.
+      - It is local rather than global.
+
+      (3) Immediately call the correct tool to generate the explanation that matches the user's question. Never stop after saying another explanation is needed. Always generate the appropriate explanation by calling the correct tool.
+
+      (4) Explain the newly generated chart and answer the user's original question.
 
       Guidelines:
-      - Be concise. Use layperson-friendly language. Answer in less than 200 words.
-      - AVOID ADDED ADVICE: Do not invent financial advice, guess missing values, or hallucinate results. Only describe relationships that are explicitly supported by the currently displayed explanation or by data returned from tools. If users ask for actions to take, describe in model's term.
+      - Be concise. Use layperson-friendly language. MUST answer in less than 200 words.
+      - AVOID ADDED ADVICE: Do not invent financial advice, or hallucinate results. Only state relationships supported by the explanation or tool outputs. When users ask what they should change, describe changes only in terms of the model's behaviour, not real-world financial advice.
       - If required inputs (e.g., factor name, target) are missing, ask the user to provide them.
-      - Clearly distinguish between advice for a single applicant versus a broader pattern across applicants.
-      - If the currently shown explanation can answer the user's question, MUST explicitly state that your answer is based on the chart shown in the dashboard. 
-      - PROACTIVE TOOL CALLING & ASSUMPTION CORRECTION: If the user asks a question that the current visible explanation cannot answer, you MUST explain the cognitive mismatch and Must call the corresponding new tool. 
-        1. Identify the user's goal (e.g., "You are looking for what to change to improve your score...").
-        2. Explain how the current chart is generated and why it cannot answer that question (e.g., "...but this chart is generated by comparing your past data to the average, not by testing hypothetical future changes, so it cannot provide advice on what to change").
-        3. And MUST immediately call the correct tool to generate the appropriate explanation and explain the chart applied. Do not just tell the user another explanation is needed; generate it.`
+      - Clearly distinguish between advice for a single applicant versus a broader pattern across applicants.`
   }, [userInstanceId, applicantReference, visibleTexts.system, visibleTexts.ui])
 
   async function handleSend(text) {
     if (!text?.trim()) return
 
     setShowSuggestions(false)
+    setIsInputFocused(false) // Hide suggestions after sending
 
     const userMsg = { role: "user", content: text }
     setMessages(prev => [...prev, userMsg])
@@ -412,9 +452,9 @@ export default function ChatPage() {
 
     let promptText = ""
     if (category === "tellsYou") {
-      promptText = `The explanation currently shown: ${visibleTexts.ui}. I chose the question: "${q}" under the category "This explanation CAN answer". Explain why the currently shown explanation can answer this question, and also tell me the answer.`
+      promptText = `${q}`
     } else {
-      promptText = `The explanation currently shown: ${visibleTexts.ui}. I chose the question: "${q}" under the category "This explanation CANNOT answer". Explain why the currently shown explanation cannot answer this question, and use the appropriate tool to generate and show the explanation that CAN answer it.`
+      promptText = `Explain why the currently shown explanation "${visibleTexts.ui}" cannot answer my question: "${q}". Use the appropriate tool to generate the explanation that can answer it.`
     }
 
     handleSend(promptText)
@@ -436,6 +476,9 @@ export default function ChatPage() {
   // Calculate unclicked Design B options
   const unclickedDesignBOptions = activeDesignBOptions?.filter(opt => !clickedQuestions.has(opt)) || [];
   */
+
+  // Condition for showing the floating popup menu
+  const showFloatingSuggestions = isInputFocused && activeDesign === "C" && !busy && selectedExplanation !== "" && (activeDesignCTellsYou.length > 0 || activeDesignCDoesntTellYou.length > 0);
 
   return (
     <div style={{ display: "flex", gap: 12, height: "100%", padding: 12 }}>
@@ -579,225 +622,132 @@ export default function ChatPage() {
           <div style={{ flex: 1, overflow: "auto", position: "relative", padding: 12 }}>
             <MessageList messages={messages} busy={busy} />
 
-            {/* Persistent Box for Design C */}
-            {activeDesign === "C" && !busy && selectedExplanation !== "" && (activeDesignCTellsYou.length > 0 || activeDesignCDoesntTellYou.length > 0) && (
-              <div
-                style={showInitialSuggestions ? {
-                  position: "absolute",
-                  top: 125,           /* Hard ceiling: box will NEVER go higher than 90px from the top */
-                  bottom: 20,        /* Pulls from the bottom so the margin can calculate the center */
-                  left: 0,
-                  right: 0,
-                  margin: "auto",    /* Magically centers the box vertically and horizontally */
-                  height: "fit-content", /* Required for vertical margin: auto to work */
-                  width: "80%",
-                  maxWidth: 450,
-                  background: "white",
-                  borderRadius: 16,
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                  border: "1px solid #e5e7eb",
-                  padding: 24,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  animation: "fadePop 0.4s ease forwards",
-                  zIndex: 10,
-                } : {
-                  /* This is the state AFTER messages are sent - stays at the bottom naturally */
-                  width: "80%",
-                  maxWidth: 450,
-                  margin: "20px auto 0 auto",
-                  background: "white",
-                  borderRadius: 16,
-                  boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
-                  border: "1px solid #e5e7eb",
-                  padding: 24,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-                  {/* Category 1: What this tells you */}
-                  {activeDesignCTellsYou.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: "#2563eb" }}>
-                        This explanation can answer:
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {activeDesignCTellsYou.map((q, idx) => {
-                          const isClicked = clickedQuestions.has(q);
-                          return (
-                            <div
-                              key={idx}
-                              onClick={() => handleDesignCQuestion(q, "tellsYou")}
-                              className="suggestion-btn"
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "12px",
-                                textAlign: "left",
-                                padding: "8px 16px",
-                                color: isClicked ? "#9ca3af" : undefined,
-                                backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
-                              }}
-                            >
-                              <div style={{ marginTop: "2px", flexShrink: 0 }}>
-                                {isClicked ? (
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
-                                    <circle cx="12" cy="12" r="12" />
-                                    <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                  </svg>
-                                ) : (
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
-                                    <circle cx="12" cy="12" r="10" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span style={{ lineHeight: "1.4" }}>{q}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Category 2: What it doesn't tell you */}
-                  {activeDesignCDoesntTellYou.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>
-                        This explanation cannot answer:
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {activeDesignCDoesntTellYou.map((q, idx) => {
-                          const isClicked = clickedQuestions.has(q);
-                          return (
-                            <div
-                              key={idx}
-                              onClick={() => handleDesignCQuestion(q, "doesntTellYou")}
-                              className="suggestion-btn"
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "12px",
-                                textAlign: "left",
-                                padding: "8px 16px",
-                                color: isClicked ? "#9ca3af" : undefined,
-                                backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6"
-                              }}
-                            >
-                              <div style={{ marginTop: "2px", flexShrink: 0 }}>
-                                {isClicked ? (
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#2563eb">
-                                    <circle cx="12" cy="12" r="12" />
-                                    <path d="M7 12.5l3 3 7-7" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                  </svg>
-                                ) : (
-                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2.5">
-                                    <circle cx="12" cy="12" r="10" />
-                                  </svg>
-                                )}
-                              </div>
-                              <span style={{ lineHeight: "1.4" }}>{q}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>
-                    Choose one to explore more, or ask any question.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Persistent Box for Design B */}
-            {/*
-            {activeDesign === "B" && !busy && selectedExplanation !== "" && unclickedDesignBOptions.length > 0 && (
-              <div
-                style={showInitialSuggestions ? {
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: "80%",
-                  maxWidth: 450,
-                  background: "white",
-                  borderRadius: 16,
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
-                  border: "1px solid #e5e7eb",
-                  padding: 24,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  animation: "fadeSlide 0.4s ease forwards",
-                  zIndex: 10,
-                } : {
-                  width: "80%",
-                  maxWidth: 450,
-                  margin: "20px auto 0 auto",
-                  background: "white",
-                  borderRadius: 16,
-                  boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
-                  border: "1px solid #e5e7eb",
-                  padding: 24,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                {showInitialSuggestions ? (
-                  <>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", textAlign: "center" }}>
-                      {DESIGN_B_CONTENT.message}
-                    </div>
-                    <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 8, textAlign: "center" }}>
-                      {DESIGN_B_CONTENT.question}
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ fontWeight: 600, fontSize: 15, color: "#374151", marginBottom: 4, textAlign: "center" }}>
-                    What else do you think this explanation can tell you?
-                  </div>
-                )}
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {unclickedDesignBOptions.map((opt, idx) => (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        setClickedQuestions(prev => new Set(prev).add(opt));
-                        let promptText = \`The explanation currently shown is: \${visibleTexts.ui}. The question is asking: "\${showInitialSuggestions ? DESIGN_B_CONTENT.question : "What do you think this explanation can tell you?"}". My answer is: "\${opt}". Explain if I am correct or not. If incorrect, use the appropriate tool to generate and show which explanation can answer my question: "\${opt}".\`;
-                        handleSend(promptText);
-                      }}
-                      className="suggestion-btn"
-                    >
-                      {opt}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            */}
-
             {/* This spacer provides the empty room needed for the browser to scroll the latest message to the top */}
             <div style={{ height: "80vh", flexShrink: 0 }} />
           </div>
 
           {/* Input Area (now inside the same border, separated by a line) */}
-          <div style={{ 
-            // borderTop: "1px solid #ddd", /* The dividing line */
-            padding: "12px", 
-            display: "flex", 
-            flexDirection: "column", 
-            gap: 8,
-            backgroundColor: "#fff" /* Not greyed out */
-          }}>
+          <div
+            style={{
+              borderTop: "1px solid #ddd", /* The dividing line */
+              padding: "12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              backgroundColor: "#fff", /* Not greyed out */
+              position: "relative" /* Critical for the absolute floating box to anchor to this div */
+            }}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={(e) => {
+              // Delay hiding slightly so clicks on suggestions register before the element unmounts/fades
+              setTimeout(() => setIsInputFocused(false), 200);
+            }}
+          >
 
-            {/* Compact Qualtrics Progress Badge */}
-            <div style={{ display: "flex", justifyContent: "center" }}>
+            {/* Floating Suggested Question List (Floats above the input) */}
+            <div style={{
+              position: "absolute",
+              bottom: "100%", // Place it right above the border line
+              left: 0,
+              right: 0,
+              padding: "0 12px", // Matches the parent padding
+              marginBottom: "8px", // Gap between float box and input box
+              zIndex: 50,
+              opacity: showFloatingSuggestions ? 1 : 0,
+              pointerEvents: showFloatingSuggestions ? "auto" : "none",
+              transform: showFloatingSuggestions ? "translateY(0)" : "translateY(10px)",
+              transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+            }}>
+              <div style={{
+                background: "white",
+                borderRadius: "12px",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.2)",
+                border: "1px solid #e5e7eb",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                maxHeight: "260px",
+                overflowY: "auto",
+              }}>
+                {/* What it CAN answer */}
+                {activeDesignCTellsYou.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#2563eb" }}>This explanation can answer:</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {activeDesignCTellsYou.map((q, idx) => {
+                        const isClicked = clickedQuestions.has(q);
+                        return (
+                          <button
+                            key={`tells-${idx}`}
+                            onMouseDown={(e) => {
+                              // Prevent input from losing focus when clicking a suggestion
+                              e.preventDefault();
+                              handleDesignCQuestion(q, "tellsYou");
+                            }}
+                            className="suggestion-btn"
+                            style={{
+                              textAlign: "left",
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              borderRadius: "16px",
+                              border: isClicked ? "1px solid #cbd5e1" : "1px solid #bfdbfe",
+                              backgroundColor: isClicked ? "#f8fafc" : "#eff6ff",
+                              color: isClicked ? "#9ca3af" : "#1e40af",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            {q}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* What it CANNOT answer */}
+                {activeDesignCDoesntTellYou.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                    <div style={{ fontSize: "13px", fontWeight: "600", color: "#4b5563" }}>This explanation cannot answer:</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {activeDesignCDoesntTellYou.map((q, idx) => {
+                        const isClicked = clickedQuestions.has(q);
+                        return (
+                          <button
+                            key={`doesnt-${idx}`}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleDesignCQuestion(q, "doesntTellYou");
+                            }}
+                            className="suggestion-btn"
+                            style={{
+                              textAlign: "left",
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              borderRadius: "16px",
+                              border: isClicked ? "1px solid #cbd5e1" : "1px solid #e5e7eb",
+                              backgroundColor: isClicked ? "#f8fafc" : "#f3f4f6",
+                              color: isClicked ? "#9ca3af" : "#374151",
+                              cursor: "pointer",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            {q}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Text Input Box */}
+            <MessageInput disabled={busy} onSend={handleSend} />
+
+            {/* Compact Qualtrics Progress Badge (Moved UNDER the input) */}
+            <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
               <div style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -821,7 +771,7 @@ export default function ChatPage() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     <span>
                       {!hasClickedAllDesignC
-                        ? "Please click all suggested questions above to continue"
+                        ? "Please click all suggested questions to continue"
                         : `Ask ${additionalQuestionsLeft} additional question${additionalQuestionsLeft !== 1 ? 's' : ''} to continue`
                       }
                     </span>
@@ -830,7 +780,6 @@ export default function ChatPage() {
               </div>
             </div>
 
-            <MessageInput disabled={busy} onSend={handleSend} />
           </div>
 
         </div>
@@ -841,16 +790,11 @@ export default function ChatPage() {
             from { opacity: 0; transform: translateY(15px); }
             to { opacity: 1; transform: translateY(0); }
           }
-          .suggestion-btn {
-            padding: 10px 14px;
-            border-radius: 8px;
-            background: #f3f4f6;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-align: center;
+          .suggestion-btn:hover { 
+            background: #2563eb !important; 
+            color: white !important; 
+            border-color: #2563eb !important; 
           }
-          .suggestion-btn:hover { background: #2563eb !important; color: white !important; }
         `}
         </style>
       </div>
@@ -892,15 +836,15 @@ export default function ChatPage() {
               ✕
             </button>
 
-            <div style={{ 
-              backgroundColor: "#eff6ff", 
-              borderLeft: "4px solid #2563eb", 
-              padding: "12px 16px", 
+            <div style={{
+              backgroundColor: "#eff6ff",
+              borderLeft: "4px solid #2563eb",
+              padding: "12px 16px",
               borderRadius: "0 8px 8px 0",
-              margin: "10px 0 24px 0" 
+              margin: "10px 0 24px 0"
             }}>
               <p style={{ fontSize: "15px", color: "#1e3a8a", margin: 0, fontWeight: 500 }}>
-                Chat with the assistant to find out what kinds of questions the displayed explanation can answer.
+                Chat with the assistant to find out what information the displayed explanation can or cannot tell you.
               </p>
             </div>
 
@@ -955,7 +899,7 @@ export default function ChatPage() {
 
               <h3 style={{ fontSize: "15px", marginTop: "20px", color: "#2563eb" }}>3. AI Assistant Chat (Right)</h3>
               <p style={{ margin: "5px 0" }}>
-                Ask the assistant about the explanation chart. <b>To begin:</b> click through the suggested questions in the center menu to learn what the current chart can and cannot answer. Ask three more questions to proceed with the survey.
+                Ask the assistant about the explanation chart. <b>Tips:</b> click through the suggested questions to learn what the current chart can and cannot answer. Ask three more questions to proceed with the survey.
               </p>
               <p style={{ margin: "5px 0" }}>You can ask questions like:</p>
               <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
