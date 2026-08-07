@@ -71,7 +71,7 @@ const DESIGN_C_QUESTIONS = {
     ],
     doesntTellYou: [
       "Which factor had the biggest impact on the score I got?",
-      "Did my credit used positively affect the score I got?",
+      "Did my credit used contribute positively to the score I got?",
       "For other applicants, does increasing on-time payment rate increases their score?",
     ]
   }
@@ -150,7 +150,7 @@ const getRequiredQuestions = () => {
       return parseInt(req, 10);
     }
   }
-  return 3;
+  return 5;
 };
 
 
@@ -833,7 +833,7 @@ export default function ChatPage() {
               margin: "10px 0 24px 0"
             }}>
               <p style={{ fontSize: "15px", color: "#1e3a8a", margin: 0, fontWeight: 500 }}>
-                Chat with the assistant to find out what information the displayed explanation can or cannot tell you.
+                Chat with the assistant to find out what information the displayed explanation can or cannot tell about the AI prediction.
               </p>
             </div>
 
@@ -841,7 +841,7 @@ export default function ChatPage() {
 
             <div style={{ fontSize: "14px", color: "#374151", lineHeight: "1.6" }}>
               <h3 style={{ fontSize: "15px", marginTop: "20px", color: "#2563eb" }}>1. Your Applicant Profile (Top Left)</h3>
-              <p style={{ margin: "5px 0" }}>Displays your credit score (50 or above is approved) and the six factors AI system used to evaluate the score.</p>
+              <p style={{ margin: "5px 0" }}>Displays your credit score (50 or above is approved) and the six factors AI system used to predict your score.</p>
 
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px", fontSize: "13px", borderBottom: "1.5px solid gray" }}>
                 <tbody>
@@ -884,11 +884,11 @@ export default function ChatPage() {
               </table>
 
               <h3 style={{ fontSize: "15px", marginTop: "20px", color: "#2563eb" }}>2. Explanation Dashboard (Bottom Left)</h3>
-              <p style={{ margin: "5px 0" }}>Displays one explanation chart explaining the AI's decision.</p>
+              <p style={{ margin: "5px 0" }}>Displays one explanation chart explaining the AI's prediction.</p>
 
               <h3 style={{ fontSize: "15px", marginTop: "20px", color: "#2563eb" }}>3. AI Assistant Chat (Right)</h3>
               <p style={{ margin: "5px 0" }}>
-                Ask the assistant about the explanation chart. <b>Tips:</b> click through the suggested questions to learn what the current chart can and cannot answer. Ask three more questions to proceed with the survey.
+                Ask the assistant about the explanation chart. <b>Tips:</b> click through the suggested questions to learn what the current explanation can and cannot answer. Ask {requiredQuestions} questions to proceed with the survey.
               </p>
               <p style={{ margin: "5px 0" }}>You can ask questions like:</p>
               <ul style={{ margin: "5px 0", paddingLeft: "20px" }}>
