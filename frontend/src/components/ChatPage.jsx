@@ -296,9 +296,8 @@ export default function ChatPage() {
       "Can this explanation directly answer the user's question based on how it is generated?"
 
       If YES:
-      - Explicitly state that your answer is based on the currently displayed ${visibleTexts.ui} explanation.
-      - Call the corresponding tool if its underlying data is required.
-      - Answer using only information supported by that explanation.
+      - Explicitly state that your answer is based on the currently displayed ${visibleTexts.ui} explanation, and why this explanation can answer the question.
+      - Call the corresponding tool if its underlying data is required, Answer using only information supported by that explanation.
 
       If NO:
       You MUST do ALL of the following:
@@ -321,7 +320,7 @@ export default function ChatPage() {
       (4) Explain the newly generated chart and answer the user's original question.
 
       Guidelines:
-      - Be concise. Use layperson-friendly language. MUST answer in less than 200 words.
+      - Be concise. Use layperson-friendly language. MUST answer in less than 150 words.
       - AVOID ADDED ADVICE: Do not invent financial advice, or hallucinate results. Only state relationships supported by the explanation or tool outputs. When users ask what they should change, describe changes only in terms of the model's behaviour, not real-world financial advice.
       - If required inputs (e.g., factor name, target) are missing, ask the user to provide them.
       - Clearly distinguish between advice for a single applicant versus a broader pattern across applicants.`
@@ -895,7 +894,7 @@ export default function ChatPage() {
                 <li>"Does this explanation only describe this applicant's result, or does it also show patterns across many applicants?"</li>
                 <li>"Does this explanation show how important each factor is to my current score?"</li>
                 <li>"Can this explanation tell me which factor the AI usually considers the most important across all applicants?"</li>
-                <li>"How would my score change if I have fewer loans?"</li>
+                <li>"How would my score change if I have more credit used?"</li>
               </ul>
             </div>
 
