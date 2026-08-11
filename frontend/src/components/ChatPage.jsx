@@ -636,7 +636,7 @@ export default function ChatPage() {
               position: "absolute",
               bottom: "100%", // Place it right above the border line
               left: 0,
-              right: 0,
+              right: 12,
               padding: "0 12px", // Matches the parent padding
               marginBottom: "8px", // Gap between float box and input box
               zIndex: 50,
