@@ -59,9 +59,9 @@ const DESIGN_C_QUESTIONS = {
       "Did my credit used positively affect the score I got?",
     ],
     doesntTellYou: [
+      "How would my score change if I have more loans?",
       "What changes can I make to improve my score to 50?",
       "Which factors are generally important across all applicants?",
-      "How would my score change if I have more loans?",
     ]
   },
   cp: {
