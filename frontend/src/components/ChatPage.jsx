@@ -70,8 +70,8 @@ const DESIGN_C_QUESTIONS = {
       "How strongly does my score react to a specific factor?"
     ],
     doesntTellYou: [
-      "Which factor had the biggest impact on the score I got?",
       "Did my credit used contribute positively to the score I got?",
+      "Which factor had the biggest impact on the score I got?",
       "For other applicants, does increasing on-time payment rate increases their score?",
     ]
   }
