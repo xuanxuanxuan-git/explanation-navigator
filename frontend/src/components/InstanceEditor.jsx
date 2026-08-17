@@ -193,6 +193,30 @@ export default function InstanceEditor({ instanceId }) {
         gap: 12,
       }}
     >
+      {/* CSS to force the disabled slider thumb to stay blue */}
+      <style>
+        {`
+          .disabled-blue-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #2563eb !important; /* blue */
+            cursor: default;
+            border: none;
+          }
+          .disabled-blue-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #2563eb !important; /* blue */
+            cursor: default;
+            border: none;
+          }
+        `}
+      </style>
+
       {/* Error */}
       {error && (
         <div
@@ -322,6 +346,8 @@ export default function InstanceEditor({ instanceId }) {
                   {/* Slider */}
                   <input
                     type="range"
+                    className="disabled-blue-slider"
+                    disabled={true}
                     min={sliderMin}
                     max={sliderMax}
                     step={1}
@@ -337,6 +363,8 @@ export default function InstanceEditor({ instanceId }) {
                       background: "#e5e7eb", /* gray bar */
                       borderRadius: "999px",
                       outline: "none",
+                      cursor: "default", // Changed to default
+                      opacity: 1, // Prevent browser default transparency on disabled inputs
                     }}
                   />
 
