@@ -148,25 +148,41 @@ def _shorten_messages(messages, num_tools):
 
     return messages
 
-def get_tool_schemas(provider: Optional[str] = None):
+def get_tool_schemas(provider: Optional[str] = None, tools_allowed: Optional[bool] = None, exp: Optional[str] = None):
     """
     Return tool schemas normalised for the target provider.
 
-    Native schemas are OpenAI/Gemini-style:
-      { "type": "function", "name": ..., "description": ..., "parameters": ... }
-
-    Ollama and current OpenAI/Azure APIs expect:
-      { "type": "function", "function": { "name": ..., "description": ..., "parameters": ... } }
+    When tools_allowed is False and exp is 'local', only returns:
+      - generate_local_shap_bar_plot
+      - generate_global_subgroup_shap_plot
     """
     provider = (provider or LLM_PROVIDER).lower()
     
-    # Both Ollama and Azure OpenAI (especially newer models like gpt-5.1) 
-    # require the nested "function" structure.
+    # Filter tools if tools_allowed is False and exp is 'local'
+    is_tools_disabled = tools_allowed is False or str(tools_allowed).lower() in ["false", "0"]
+    exp_normalized = (exp or "").strip().lower()
+
+    if is_tools_disabled and exp_normalized == "local":
+        allowed_names = {"generate_local_shap_bar_plot"}
+        base_tools = [
+            t for t in explainer_tools
+            if (t.get("name") in allowed_names or t.get("function", {}).get("name") in allowed_names)
+        ]
+    elif is_tools_disabled and exp_normalized == "cp":
+        allowed_names = {"get_cp_plot"}
+        base_tools = [
+            t for t in explainer_tools
+            if (t.get("name") in allowed_names or t.get("function", {}).get("name") in allowed_names)
+        ] 
+    else:
+        base_tools = explainer_tools
+
+    # Both Ollama and Azure OpenAI require the nested "function" structure.
     needs_wrapped = provider in ["ollama", "azure_openai", "openai", "azure"]
     
     if needs_wrapped:
         normalised = []
-        for t in explainer_tools:
+        for t in base_tools:
             # Accept both already-wrapped and flat schemas
             if "function" in t:
                 normalised.append(t)
@@ -182,7 +198,7 @@ def get_tool_schemas(provider: Optional[str] = None):
         return normalised
 
     # Fallback for Gemini which accepts the flat schema
-    return explainer_tools
+    return base_tools
 
 def _validate_tool_arguments(tool_name: str, arguments: dict) -> tuple:
     """
@@ -339,8 +355,8 @@ class AzureOpenAIClient(BaseLLMClient):
     def chat(self, messages, model=None, options=None, tools=None):
         response = self.client.chat.completions.create(
             model=model or AZURE_OPENAI_CHAT_DEPLOYMENT,
-            messages= messages, #self._to_openai_messages(messages),
-            tools=tools,
+            messages=messages,
+            tools=tools if tools else None,
             temperature=(options or {}).get("temperature", 1),
         )
 
@@ -351,8 +367,8 @@ class AzureOpenAIClient(BaseLLMClient):
 
         stream = self.client.chat.completions.create(
             model=model or AZURE_OPENAI_CHAT_DEPLOYMENT,
-            messages= messages, #self._to_openai_messages(messages),
-            tools=tools,
+            messages=messages,
+            tools=tools if tools else None,
             temperature=(options or {}).get("temperature", 1),
             stream=True,
         )
@@ -392,8 +408,9 @@ llm_client = get_llm_client(LLM_PROVIDER)
 # TOOL-CALLING LOOP (LLM-AGNOSTIC)
 # =============================================================================
 
-def _chat_with_tools(messages: list, model: str = None, #history: ,
-                    options: dict = None, max_iterations: int = 3, session_id: str = "anonymous"):
+def _chat_with_tools(messages: list, model: str = None,
+                    options: dict = None, max_iterations: int = 3, session_id: str = "anonymous",
+                    tools_allowed: Optional[bool] = None, exp: Optional[str] = None):
     """
     Chat with tool calling support. Handles tool calls iteratively.
     Returns: (tool_reply_messages, visualisations)
@@ -404,6 +421,8 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
     iteration = 0
     visualisations = []
     
+    tool_schemas = get_tool_schemas(LLM_PROVIDER, tools_allowed=tools_allowed, exp=exp)
+    
     while iteration < max_iterations:
         # app.logger.info(f"Tool iteration {iteration}")
         log_user_action(session_id, f"Tool iteration {iteration}")
@@ -413,7 +432,7 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
             messages=local_messages,
             model=model,
             options=options,
-            tools=get_tool_schemas(LLM_PROVIDER),
+            tools=tool_schemas,
         )
         # structure of the assistant_msg: {"role": ..., "content": ..., "tool_calls": ...}
         
@@ -449,7 +468,6 @@ def _chat_with_tools(messages: list, model: str = None, #history: ,
             tool_name = func_info.get("name")
             raw_args = func_info.get("arguments") or {}
 
-            # some LLM returns arguments as a string, not a dict
             if isinstance(raw_args, str):
                 try:
                     tool_args = json.loads(raw_args)
@@ -528,7 +546,7 @@ def chat_non_stream():
     data = request.get_json(force=True) or {}
     user_message = (data.get("message") or "").strip()
     history = _normalise_messages(data.get("history") or [])
-    render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
+    render_tools = data.get("render_tools", False)
     session_id = data.get("session_id", "anonymous")
 
     if not user_message and not render_tools:
@@ -537,7 +555,6 @@ def chat_non_stream():
     if user_message:
         log_user_action(session_id, f"USER ASKED: {user_message}")
 
-    # Set a system message here (or pass from frontend).
     system = (data.get("system") or "Answer questions succinctly.").strip()
     
     try:
@@ -576,6 +593,8 @@ def chat_with_tools():
     system = (data.get("system") or "").strip()
     model = data.get("model")
     session_id = data.get("session_id", "anonymous")
+    tools_allowed = data.get("tools", True)
+    exp = data.get("exp", "local")
     
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
@@ -600,7 +619,9 @@ def chat_with_tools():
             messages=messages,
             model=model,
             options=data.get("options") or {"temperature": 1},
-            session_id=session_id
+            session_id=session_id,
+            tools_allowed=tools_allowed,
+            exp=exp
         )
 
         return jsonify({"reply": reply, "model": model})
@@ -621,11 +642,13 @@ def chat_with_tools_stream():
     system = (data.get("system") or "").strip()
     model = data.get("model")
     session_id = data.get("session_id", "anonymous")
+    tools_allowed = data.get("tools", True)
+    exp = data.get("exp", "local")
 
     if not user_message:
         return jsonify({"error": "Missing 'message' field"}), 400
         
-    log_user_action(session_id, f"New chat starts. User question is: {user_message}")
+    log_user_action(session_id, f"New chat starts. Use tool: {tools_allowed}. User question is: {user_message}")
     
     messages = []
 
@@ -645,7 +668,9 @@ def chat_with_tools_stream():
             messages=messages,
             model=model,
             options=data.get("options") or {"temperature": 1},
-            session_id=session_id
+            session_id=session_id,
+            tools_allowed=tools_allowed,
+            exp=exp
         )
 
         log_user_action(session_id, f"Reply from the tool call: {reply_with_tools}")
@@ -698,7 +723,7 @@ def chat_stream():
     data = request.get_json(force=True) or {}
     user_message = (data.get("message") or "").strip()
     history = _normalise_messages(data.get("history") or [])
-    render_tools = data.get("render_tools", False)  # Flag to render tool call results; user_message is empty
+    render_tools = data.get("render_tools", False)
     session_id = data.get("session_id", "anonymous")
 
     if not user_message and not render_tools:
@@ -750,7 +775,9 @@ def chat_stream():
 @app.get("/api/tools")
 def list_tools():
     """List available tools/functions"""
-    return jsonify({"tools": get_tool_schemas(LLM_PROVIDER)})
+    tools_allowed = request.args.get("tools", default="true")
+    exp = request.args.get("exp", default=None)
+    return jsonify({"tools": get_tool_schemas(LLM_PROVIDER, tools_allowed=tools_allowed, exp=exp)})
 
 
 @app.get("/api/instance/<int:instance_id>")

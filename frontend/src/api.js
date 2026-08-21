@@ -81,11 +81,11 @@ export function chatStream({ message, history = [], model, system, options, onTo
 }
 
 // Tool calling with streaming final response
-export function chatWithToolsStream({ message, history = [], model, system, options, onToken, onDone, onVisualisations, onError }) {
+export function chatWithToolsStream({ message, history = [], model, system, tools, exp, options, onToken, onDone, onVisualisations, onError }) {
   fetch(`${BASE_URL}/api/chat/tools/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, history, model, system, options, session_id: SESSION_ID })
+    body: JSON.stringify({ message, history, model, system, tools, exp, options, session_id: SESSION_ID })
   }).then(async (res) => {
     if (!res.ok) throw new Error(await res.text())
     const reader = res.body.getReader()
