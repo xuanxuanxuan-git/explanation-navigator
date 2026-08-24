@@ -162,7 +162,7 @@ const getAllowToolsParam = () => {
       return toolsParam.toLowerCase() !== "false" && toolsParam !== "0";
     }
   }
-  return false; // Default: do not call other tools, only explain limitations
+  return true; // Default: call other tools
 };
 
 
