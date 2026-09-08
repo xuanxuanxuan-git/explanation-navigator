@@ -6,9 +6,9 @@ export default function MessageInput({ disabled, onSend }) {
   const MAX_HEIGHT = 280 // px 
 
   // Focus on initial mount and whenever the input becomes enabled again.
-  useEffect(() => {
-    if (!disabled) inputRef.current?.focus()
-  }, [disabled])
+  // useEffect(() => {
+  //   if (!disabled) inputRef.current?.focus()
+  // }, [disabled])
 
   // Auto-resize on text changes
   useLayoutEffect(() => {
@@ -38,7 +38,7 @@ export default function MessageInput({ disabled, onSend }) {
     onSend(t)
 
     // Optional: attempt focus immediately (useEffect will also refocus once enabled)
-    inputRef.current?.focus()
+    // inputRef.current?.focus()
   }
 
   function onKeyDown(e) {
