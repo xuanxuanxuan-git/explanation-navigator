@@ -171,7 +171,7 @@ export default function ChatPage() {
   const [userInstanceId] = useState(getInitialInstanceId())
   const [participantId] = useState(getParticipantId());
   const [allowTools] = useState(getAllowToolsParam());
-  
+
   // Set required questions to 8 directly
   const [requiredQuestions] = useState(getRequiredQuestions());
   const [showManual, setShowManual] = useState(false)
@@ -226,7 +226,7 @@ export default function ChatPage() {
   // Simply count how many total messages the user has sent
   const totalUserQuestions = messages.filter(m => m.role === 'user').length;
   const additionalQuestionsLeft = Math.max(0, requiredQuestions - totalUserQuestions);
-  
+
   // The requirement is met solely if they have asked 8 questions
   const isRequirementMet = totalUserQuestions >= requiredQuestions;
 
@@ -760,7 +760,7 @@ export default function ChatPage() {
             <MessageInput disabled={busy} onSend={handleSend} />
 
             {/* Compact Qualtrics Progress Badge (Moved UNDER the input) */}
-            <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
+            {/* <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
               <div style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -783,16 +783,12 @@ export default function ChatPage() {
                   <>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     <span>
-                    {/* {!hasClickedAllDesignC
-                        ? "Please click all suggested questions to continue"
-                        : `Ask ${additionalQuestionsLeft} additional question${additionalQuestionsLeft !== 1 ? 's' : ''} to continue`
-                      } */}
                       Ask {additionalQuestionsLeft} additional question{additionalQuestionsLeft !== 1 ? 's' : ''} to continue
                     </span>
                   </>
                 )}
               </div>
-            </div>
+            </div> */}
 
           </div>
 
