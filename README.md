@@ -19,7 +19,7 @@ You can try the Explanation Navigator here:
 
 ### Video Demo
 
-<a href="assets/system_demo.mp4">
+<a href="assets/system_demo_small.mp4">
   <img src="assets/demo_thumbnail.png" alt="Watch the demo" width="500">
 </a>
 
