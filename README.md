@@ -19,11 +19,7 @@ You can try the Explanation Navigator here:
 
 ### Video Demo
 
-<a href="assets/system_demo_small.mp4">
-  <img src="assets/demo_thumbnail.png" alt="Watch the demo" width="500">
-</a>
-
-Click the image above to open the demo video.
+<img src="assets/system_demo.gif" alt="System demo" width="600">
 
 ## Prototype Functions
 
