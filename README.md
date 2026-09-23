@@ -1,4 +1,4 @@
-[![License](https://img.shields.io/github/license/xuanxuanxuan-git/explanation-navigator)](https://github.com/xuanxuanxuan-git/explanation-navigator/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![arXiv](https://img.shields.io/badge/arXiv-2609.22707-red.svg)](https://arxiv.org/abs/2609.22707)
 
 # Explanation Navigator
