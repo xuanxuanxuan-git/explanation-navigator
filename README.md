@@ -21,6 +21,11 @@ You can try the Explanation Navigator here:
 
 <img src="assets/system_demo.gif" alt="System demo" width="600">
 
+Questions asked in the demo:
+- Is on-time payment rate the most important feature for all other applicants?
+- Which feature had the biggest impact on the score I received?
+- What changes can I make to improve my score to 50?
+
 ## Prototype Functions
 
 You can explore different configurations of the Explanation Navigator by adding query parameters to the URL.
