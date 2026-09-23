@@ -1,5 +1,4 @@
 [![License](https://img.shields.io/github/license/xuanxuanxuan-git/explanation-navigator)](https://github.com/xuanxuanxuan-git/explanation-navigator/blob/main/LICENSE)
-
 [![arXiv](https://img.shields.io/badge/arXiv-2609.22707-red.svg)](https://arxiv.org/abs/2609.22707)
 
 # Explanation Navigator
@@ -20,7 +19,9 @@ You can try the Explanation Navigator here:
 
 ### Video Demo
 
-[![Watch the demo](assets/demo_thumbnail.png)](assets/system_demo.mp4)
+<a href="assets/system_demo.mp4">
+  <img src="assets/demo_thumbnail.png" alt="Watch the demo" width="500">
+</a>
 
 Click the image above to open the demo video.
 
